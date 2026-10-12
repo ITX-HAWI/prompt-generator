@@ -258,13 +258,17 @@ function refreshOptionsUI(){
 refreshOptionsUI();
 
 /* ================= Audio ================= */
-var audioCtx=null;
-function tone(f,d,type,v,slide){
+var audioCtx=null, noiseBuf=null;
+function ensureCtx(){
+  audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  return audioCtx;
+}
+function tone(f,d,type,v,slide,delay){
   if(!soundOn) return;
   try{
-    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
-    if(audioCtx.state==='suspended') audioCtx.resume();
-    var o=audioCtx.createOscillator(),g=audioCtx.createGain(),t=audioCtx.currentTime;
+    ensureCtx();
+    var o=audioCtx.createOscillator(),g=audioCtx.createGain(),t=audioCtx.currentTime+(delay||0);
     o.type=type||'sine'; o.frequency.setValueAtTime(f,t);
     if(slide) o.frequency.exponentialRampToValueAtTime(slide,t+d);
     g.gain.setValueAtTime(v||0.1,t);
@@ -273,11 +277,48 @@ function tone(f,d,type,v,slide){
     o.start(t); o.stop(t+d);
   }catch(e){}
 }
+/* thak ki awaz ke liye filtered noise burst */
+function clack(delay,vol,freq,dur){
+  if(!soundOn) return;
+  try{
+    ensureCtx();
+    if(!noiseBuf){
+      var len=Math.floor(audioCtx.sampleRate*0.5);
+      noiseBuf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
+      var dd=noiseBuf.getChannelData(0);
+      for(var i=0;i<len;i++) dd[i]=Math.random()*2-1;
+    }
+    var t0=audioCtx.currentTime+(delay||0);
+    var src=audioCtx.createBufferSource(); src.buffer=noiseBuf;
+    src.playbackRate.value=0.9+Math.random()*0.2;
+    var bp=audioCtx.createBiquadFilter();
+    bp.type='bandpass'; bp.frequency.value=freq||2500; bp.Q.value=1.1;
+    var g=audioCtx.createGain();
+    var d=dur||0.07;
+    g.gain.setValueAtTime(vol||0.3,t0);
+    g.gain.exponentialRampToValueAtTime(0.001,t0+d);
+    src.connect(bp); bp.connect(g); g.connect(audioCtx.destination);
+    src.start(t0); src.stop(t0+d+0.02);
+  }catch(e){}
+}
 var sfx={
   click:function(){tone(620,0.06,'square',0.05);},
-  dice:function(){tone(300,0.08,'triangle',0.08,500);},
+  dice:function(){
+    if(!soundOn) return;
+    var dl=0, gap=0.085, vol=0.45, i;
+    for(i=0;i<6;i++){
+      clack(dl, vol, 2100+Math.random()*1400, 0.06);
+      dl+=gap; gap*=0.8; vol*=0.7;
+    }
+    clack(dl+0.03, 0.1, 3200, 0.05);
+  },
   step:function(){tone(520,0.07,'sine',0.07);},
-  capture:function(){tone(700,0.25,'sawtooth',0.1,120);},
+  capture:function(){
+    tone(170,0.2,'sine',0.28,55);
+    clack(0.01,0.35,850,0.09);
+    tone(660,0.09,'sine',0.11,null,0.06);
+    tone(990,0.14,'sine',0.11,null,0.14);
+  },
   six:function(){tone(880,0.18,'sine',0.1,1400);},
   win:function(){var n=[523,659,784,1047];n.forEach(function(f,i){setTimeout(function(){tone(f,0.25,'sine',0.12);},i*160);});}
 };
