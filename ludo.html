@@ -143,7 +143,7 @@ var TRACK=[
 [0,7]
 ];
 var SAFE=new Uint8Array(52);
-[0,9,13,22,26,35,39,48].forEach(function(i){SAFE[i]=1;});
+[9,22,35,48].forEach(function(i){SAFE[i]=1;});
 
 var COLORS={
   red:   {main:'#b01e28', dark:'#6d1017', light:'#f3c1c1', name:'Red'},
@@ -153,7 +153,8 @@ var COLORS={
 };
 var GOLD='#d4af37', GOLD_LT='#f7e7a0', GOLD_DK='#8a6508';
 var ORDER=['red','green','yellow','blue'];
-var STARTS={red:0, green:13, yellow:26, blue:39};
+var STARTS={red:1, green:14, yellow:27, blue:40};
+ORDER.forEach(function(c){ SAFE[STARTS[c]]=1; });
 var HOME_COLS={
   red:   [[1,7],[2,7],[3,7],[4,7],[5,7]],
   green: [[7,1],[7,2],[7,3],[7,4],[7,5]],
