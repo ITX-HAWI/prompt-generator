@@ -526,12 +526,18 @@ function onRolled(roll){
   rolls.push(roll); renderRolls();
   beginMovePhase();
 }
-/* tamam jama dice ab baari baari gotiyon par lagao */
+/* kya koi bacha hua die kisi goti par lag sakta hai? */
+function anyPlayable(pl){
+  for(var k=0;k<rolls.length;k++){
+    if(legalMoves(pl,rolls[k]).length>0) return true;
+  }
+  return false;
+}
+/* tamam jama dice ab baari baari gotiyon par lagao — kisi bhi order mein */
 function beginMovePhase(){
   var pl=players[turn];
-  rolls=rolls.filter(function(r){ return legalMoves(pl,r).length>0; });
   renderRolls();
-  if(rolls.length===0){
+  if(!anyPlayable(pl)){
     setMsg('No possible moves.');
     setTimeout(function(){ endTurn(false); }, D(1300));
     return;
@@ -565,8 +571,16 @@ function showDiePopup(pieceIdx, options){
   var P=pos[turn+':'+pieceIdx];
   if(!P){ return; }
   var r=canvas.getBoundingClientRect();
-  diePopupEl.style.left=(r.left+bx+P.x*cell)+'px';
-  diePopupEl.style.top=(r.top+by+P.y*cell)+'px';
+  var x=r.left+bx+P.x*cell, y=r.top+by+P.y*cell;
+  x=Math.max(70, Math.min(window.innerWidth-70, x));
+  if(y<140){
+    diePopupEl.style.transform='translate(-50%,12%)';
+    y=Math.min(window.innerHeight-90, y);
+  }else{
+    diePopupEl.style.transform='translate(-50%,-115%)';
+  }
+  diePopupEl.style.left=x+'px';
+  diePopupEl.style.top=y+'px';
   diePopupEl.innerHTML='';
   options.forEach(function(o){
     var b=document.createElement('button');
@@ -606,9 +620,8 @@ function applyChosen(pl, opt){
   if(captured){ sfx.capture(); turnCaptured=true; }
   else sfx.step();
   if(hasWon(pl)) return gameOver(pl);
-  rolls=rolls.filter(function(r){ return legalMoves(pl,r).length>0; });
   renderRolls();
-  if(rolls.length===0){
+  if(!anyPlayable(pl)){
     if(turnCaptured) setMsg('Captured! Roll again!');
     endTurn(turnCaptured);
   }else{
@@ -642,9 +655,8 @@ function aiMove(){
   sfx.step();
   if(captured){ sfx.capture(); turnCaptured=true; }
   if(hasWon(pl)) return gameOver(pl);
-  rolls=rolls.filter(function(r){ return legalMoves(pl,r).length>0; });
   renderRolls();
-  if(rolls.length===0){
+  if(!anyPlayable(pl)){
     setMsg(labelOf(pl)+(turnCaptured?' captured and rolls again!':' finishes.'));
     setTimeout(function(){ endTurn(turnCaptured); }, D(900));
   }else{
