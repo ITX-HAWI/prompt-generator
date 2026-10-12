@@ -36,8 +36,41 @@
   }
   #diceBtn:disabled { opacity:.45; cursor:default; }
   #diceBtn:active:not(:disabled) { transform:scale(.93); }
+  #diceBtn:not(:disabled) { animation:dicePulse 1.4s ease-in-out infinite; }
+  @keyframes dicePulse {
+    0%,100% { filter:drop-shadow(0 6px 14px rgba(0,0,0,.5)); }
+    50% { filter:drop-shadow(0 0 22px rgba(255,215,100,.95)) drop-shadow(0 6px 14px rgba(0,0,0,.5)); }
+  }
   #diceBtn canvas { display:block; width:92px; height:92px; }
-  #msg { font-size:14px; opacity:.85; min-height:20px; text-align:center; letter-spacing:.5px; }
+  #playersRow { display:flex; gap:6px; justify-content:center; }
+  .pchip {
+    display:flex; align-items:center; gap:6px; padding:5px 10px; border-radius:999px;
+    background:rgba(0,0,0,.42); border:1.5px solid rgba(212,175,55,.35);
+    font-size:12px; font-weight:700; letter-spacing:.5px; color:#f5e9c8;
+    transition:border-color .25s, box-shadow .25s; white-space:nowrap;
+  }
+  .pchip .dot { width:12px; height:12px; border-radius:50%; border:1.5px solid #fff; }
+  .pchip .home { color:#ffd76e; font-weight:800; }
+  .pchip.cur { border-color:#ffd76e; box-shadow:0 0 12px rgba(255,215,110,.55); }
+  #msg {
+    font-size:14px; min-height:20px; text-align:center; letter-spacing:.5px; color:#ffe9b0;
+    align-self:center; background:rgba(0,0,0,.45); border:1.5px solid rgba(212,175,55,.5);
+    border-radius:999px; padding:6px 16px; max-width:94%;
+  }
+  #turnBanner {
+    position:fixed; left:50%; top:38%; transform:translate(-50%,-50%);
+    z-index:25; pointer-events:none; font-size:34px; font-weight:900; letter-spacing:4px;
+    color:#ffe9b0; text-shadow:0 0 18px rgba(255,200,80,.9), 0 2px 6px rgba(0,0,0,.7);
+    opacity:0; white-space:nowrap;
+  }
+  #turnBanner.show { animation:bannerIn 1.4s ease-out forwards; }
+  @keyframes bannerIn {
+    0% { opacity:0; transform:translate(-50%,-50%) scale(.6); }
+    18% { opacity:1; transform:translate(-50%,-50%) scale(1.08); }
+    32% { transform:translate(-50%,-50%) scale(1); }
+    75% { opacity:1; }
+    100% { opacity:0; transform:translate(-50%,-50%) scale(1.02); }
+  }
   #wrap { flex:1; position:relative; }
   #board { display:block; width:100%; height:100%; }
   .panel {
@@ -89,6 +122,7 @@
     <div id="turnInd"><span id="turnDot"></span><span id="turnName">Ludo King</span></div>
     <button id="btnMenuTop">MENU</button>
   </div>
+  <div id="playersRow"></div>
   <div id="diceRow">
     <button id="diceBtn" disabled><canvas id="diceCanvas" width="184" height="184"></canvas></button>
   </div>
@@ -97,6 +131,7 @@
 </div>
 <div id="wrap"><canvas id="board"></canvas></div>
 <div id="diePopup" class="hidden"></div>
+<div id="turnBanner" class="hidden"></div>
 
 <div id="menu" class="panel">
   <h1>LUDO KING</h1>
@@ -191,6 +226,8 @@ var diceBtn=document.getElementById('diceBtn');
 var diceCanvas=document.getElementById('diceCanvas');
 var dctx=diceCanvas.getContext('2d');
 var msgEl=document.getElementById('msg');
+var playersRowEl=document.getElementById('playersRow');
+var bannerEl=document.getElementById('turnBanner');
 var turnDot=document.getElementById('turnDot');
 var turnName=document.getElementById('turnName');
 var PANELS=['menu','options','psetup','csetup','gameover'];
@@ -450,6 +487,19 @@ function legalMoves(pl, roll){
 }
 function applyMove(pl, mv){
   var captured=false;
+  var pi=players.indexOf(pl);
+  /* visual path — state change se PEHLE snapshot */
+  var segs=[];
+  if(mv.from===-1){
+    var a=progXY(pl,-1,mv.piece), b=progXY(pl,0,mv.piece);
+    segs=[{x0:a[0],y0:a[1],x1:b[0],y1:b[1],dur:260,el:0,hop:false,pop:true}];
+  }else{
+    for(var s=mv.from+1;s<=mv.to;s++){
+      var p0=progXY(pl,s-1,mv.piece), p1=progXY(pl,s,mv.piece);
+      segs.push({x0:p0[0],y0:p0[1],x1:p1[0],y1:p1[1],dur:100,el:0,hop:true,pop:false});
+    }
+  }
+  queueAnim(pi,mv.piece,segs);
   if(mv.to<=50){
     var idx=trackIdxOf(pl,mv.to);
     if(!SAFE[idx]){
@@ -458,6 +508,8 @@ function applyMove(pl, mv){
         for(var i=0;i<4;i++){
           var p=players[q].pieces[i];
           if(p>=0&&p<=50&&trackIdxOf(players[q],p)===idx){
+            var vp=progXY(players[q],p,i), bs=progXY(players[q],-1,i);
+            queueAnim(q,i,[{x0:vp[0],y0:vp[1],x1:bs[0],y1:bs[1],dur:420,el:0,hop:false,pop:false}]);
             players[q].pieces[i]=-1; captured=true;
           }
         }
@@ -465,17 +517,40 @@ function applyMove(pl, mv){
     }
   }
   pl.pieces[mv.piece]=mv.to;
+  renderPlayers();
   return captured;
 }
 function hasWon(pl){ return pl.pieces.every(function(p){return p===56;}); }
 
 /* ================= Flow ================= */
 function setMsg(t){ msgEl.textContent=t; }
+function renderPlayers(){
+  if(!players.length) return;
+  playersRowEl.innerHTML='';
+  players.forEach(function(pl,pi){
+    var home=0, i;
+    for(i=0;i<4;i++) if(pl.pieces[i]===56) home++;
+    var name=pl.human?((humanCols.length===1)?'You':('P'+pl.humanNum)):labelOf(pl);
+    var d=document.createElement('div');
+    d.className='pchip'+(pi===turn?' cur':'');
+    d.innerHTML='<span class="dot" style="background:'+COLORS[pl.color].main+'"></span>'+
+      '<span>'+name+'</span><span class="home">★'+home+'/4</span>';
+    playersRowEl.appendChild(d);
+  });
+}
+function showBanner(t){
+  bannerEl.textContent=t;
+  bannerEl.classList.remove('hidden');
+  bannerEl.classList.remove('show');
+  void bannerEl.offsetWidth;
+  bannerEl.classList.add('show');
+}
 function syncTurn(){
   var pl=players[turn];
   turnDot.style.background=COLORS[pl.color].main;
   turnDot.style.color=COLORS[pl.color].main;
   turnName.textContent=(pl.human&&humanCols.length===1)?'Your turn':(labelOf(pl)+"'s turn");
+  renderPlayers();
   drawDice(0);
 }
 function startTurn(){
@@ -484,6 +559,7 @@ function startTurn(){
   rolls=[]; sixes=0; turnCaptured=false; popupFor=-1;
   hideDiePopup(); renderRolls();
   syncTurn();
+  showBanner((pl.human&&humanCols.length===1)?'YOUR TURN':(labelOf(pl).toUpperCase()+"'S TURN"));
   diceBtn.disabled=!pl.human;
   if(pl.human){ setMsg(labelOf(pl)==='You'?'Your turn — roll the dice!':(labelOf(pl)+', roll the dice!')); phase='awaitRoll'; }
   else { setMsg(labelOf(pl)+' is thinking…'); phase='aiWait';
@@ -697,6 +773,39 @@ function gameOver(pl){
 }
 
 /* ================= Piece layout ================= */
+/* ============ Piece hop animation (visual only, game state foran update hota hai) ============ */
+var pieceAnims={}; /* "pi:ci" -> [{x0,y0,x1,y1,dur,el,hop,pop}] */
+function progXY(pl, prog, ci){
+  if(prog===-1){ var s=pl.spots[ci]; return [s[0],s[1]]; }
+  if(prog===56){ return [7.5+((ci%2)-0.5)*0.55, 7.5+((ci<2?-0.5:0.5))*0.55]; }
+  var c=cellOf(pl,prog); return [c[0]+0.5, c[1]+0.5];
+}
+function animCur(k){
+  var q=pieceAnims[k];
+  if(q&&q.length){
+    var s=q[0], t=Math.min(1,s.el/s.dur);
+    return [s.x0+(s.x1-s.x0)*t, s.y0+(s.y1-s.y0)*t-(s.hop?Math.sin(Math.PI*t)*0.38:0)];
+  }
+  return null;
+}
+function queueAnim(pi,ci,segs){
+  var k=pi+':'+ci, cur=animCur(k);
+  if(cur&&segs.length){ segs[0].x0=cur[0]; segs[0].y0=cur[1]; }
+  pieceAnims[k]=segs;
+}
+function stepAnims(dtms){
+  Object.keys(pieceAnims).forEach(function(k){
+    var q=pieceAnims[k];
+    if(!q||!q.length){ delete pieceAnims[k]; return; }
+    var rem=dtms;
+    while(q.length&&rem>0){
+      var s=q[0], need=s.dur-s.el;
+      if(rem>=need){ rem-=need; q.shift(); }
+      else { s.el+=rem; rem=0; }
+    }
+    if(!q.length) delete pieceAnims[k];
+  });
+}
 function layoutPieces(){
   var pos={}, groups={};
   players.forEach(function(pl,pi){
@@ -729,6 +838,16 @@ function layoutPieces(){
         pos[pi+':'+ci]={x:7.5+((ci%2)-0.5)*0.55, y:7.5+((ci<2?-0.5:0.5))*0.55, r:0.2};
       }
     });
+  });
+  /* active animations override positions */
+  Object.keys(pos).forEach(function(k){
+    var q=pieceAnims[k];
+    if(q&&q.length){
+      var s=q[0], t=Math.min(1,s.el/s.dur);
+      var x=s.x0+(s.x1-s.x0)*t, y=s.y0+(s.y1-s.y0)*t;
+      if(s.hop) y-=Math.sin(Math.PI*t)*0.38;
+      pos[k]={x:x, y:y, r:pos[k].r*(s.pop?(0.35+0.65*t):1)};
+    }
   });
   return pos;
 }
@@ -844,30 +963,40 @@ function draw(){
   ctx.fillText('★',cx,cy+1);
   var pos=layoutPieces();
   var pulse=0.5+0.5*Math.sin(time*6);
-  players.forEach(function(pl,pi){
-    var col=COLORS[pl.color];
-    pl.pieces.forEach(function(prog,ci){
-      var P=pos[pi+':'+ci]; if(!P) return;
-      var px=X(P.x), py=Y(P.y), pr=P.r*cell;
-      var isMovable=(players.length&&players[turn]===pl&&phase==='awaitMove'&&movableGlow.indexOf(ci)>=0);
-      if(isMovable){
-        ctx.save();
-        ctx.strokeStyle='#ffffff'; ctx.lineWidth=3;
-        ctx.shadowColor=col.main; ctx.shadowBlur=12+10*pulse;
-        ctx.beginPath(); ctx.arc(px,py,pr+4+3*pulse,0,6.3); ctx.stroke();
-        ctx.restore();
-      }
+  var animKeys={};
+  Object.keys(pieceAnims).forEach(function(k){ if(pieceAnims[k].length) animKeys[k]=1; });
+  function drawOne(pi,ci,prog){
+    var pl=players[pi], col=COLORS[pl.color];
+    var P=pos[pi+':'+ci]; if(!P) return;
+    var px=X(P.x), py=Y(P.y), pr=P.r*cell;
+    var isMovable=(players.length&&players[turn]===pl&&phase==='awaitMove'&&movableGlow.indexOf(ci)>=0);
+    if(isMovable){
       ctx.save();
-      ctx.shadowColor='rgba(0,0,0,0.35)'; ctx.shadowBlur=4; ctx.shadowOffsetY=2;
-      ctx.fillStyle=col.main;
-      ctx.beginPath(); ctx.arc(px,py,pr,0,6.3); ctx.fill();
+      ctx.strokeStyle='#ffffff'; ctx.lineWidth=3;
+      ctx.shadowColor=col.main; ctx.shadowBlur=12+10*pulse;
+      ctx.beginPath(); ctx.arc(px,py,pr+4+3*pulse,0,6.3); ctx.stroke();
       ctx.restore();
-      ctx.fillStyle='rgba(255,255,255,0.85)';
-      ctx.beginPath(); ctx.arc(px-pr*0.28,py-pr*0.28,pr*0.32,0,6.3); ctx.fill();
-      ctx.strokeStyle=col.dark; ctx.lineWidth=2;
-      ctx.beginPath(); ctx.arc(px,py,pr,0,6.3); ctx.stroke();
-      ctx.strokeStyle=GOLD; ctx.lineWidth=Math.max(1.5,pr*0.07);
-      ctx.beginPath(); ctx.arc(px,py,pr+2.5,0,6.3); ctx.stroke();
+    }
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,0.35)'; ctx.shadowBlur=4; ctx.shadowOffsetY=2;
+    ctx.fillStyle=col.main;
+    ctx.beginPath(); ctx.arc(px,py,pr,0,6.3); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle='rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.arc(px-pr*0.28,py-pr*0.28,pr*0.32,0,6.3); ctx.fill();
+    ctx.strokeStyle=col.dark; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(px,py,pr,0,6.3); ctx.stroke();
+    ctx.strokeStyle=GOLD; ctx.lineWidth=Math.max(1.5,pr*0.07);
+    ctx.beginPath(); ctx.arc(px,py,pr+2.5,0,6.3); ctx.stroke();
+  }
+  players.forEach(function(pl,pi){
+    pl.pieces.forEach(function(prog,ci){
+      if(!animKeys[pi+':'+ci]) drawOne(pi,ci,prog);
+    });
+  });
+  players.forEach(function(pl,pi){
+    pl.pieces.forEach(function(prog,ci){
+      if(animKeys[pi+':'+ci]) drawOne(pi,ci,prog);
     });
   });
 }
@@ -877,6 +1006,7 @@ function loop(now){
   var dt=(now-last)/1000; last=now;
   if(dt>0.05) dt=0.05;
   time+=dt;
+  stepAnims(dt*1000);
   draw();
   requestAnimationFrame(loop);
 }
