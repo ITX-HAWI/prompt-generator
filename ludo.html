@@ -8,12 +8,13 @@
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
-    height:100%; overflow:hidden; background:#0b1026;
+    height:100%; overflow:hidden; background:#17100a;
     font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
     touch-action:none; -webkit-user-select:none; user-select:none;
     -webkit-tap-highlight-color: transparent;
   }
-  body { display:flex; flex-direction:column; }
+  body { display:flex; flex-direction:column;
+    background:radial-gradient(ellipse at 50% -10%, #3a2415 0%, #17100a 65%) fixed; }
   #topbar {
     padding:10px 14px 6px; color:#fff; z-index:5;
     display:flex; flex-direction:column; gap:8px;
@@ -42,7 +43,7 @@
   .panel {
     position:fixed; inset:0; z-index:10;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    color:#fff; text-align:center; padding:0 24px; background:rgba(5,8,25,0.82);
+    color:#fff; text-align:center; padding:0 24px; background:rgba(24,14,7,0.86);
   }
   .panel h1 {
     font-size:38px; font-weight:900; letter-spacing:3px; margin-bottom:10px;
@@ -179,7 +180,7 @@ var turnDot=document.getElementById('turnDot');
 var turnName=document.getElementById('turnName');
 var PANELS=['menu','options','psetup','csetup','gameover'];
 
-var W=0,H=0,DPR=1,cell=0,bx=0,by=0;
+var W=0,H=0,DPR=1,cell=0,bx=0,by=0,tableCv=null;
 function resize(){
   DPR=Math.min(window.devicePixelRatio||1,2);
   W=wrap.clientWidth; H=wrap.clientHeight;
@@ -188,6 +189,49 @@ function resize(){
   ctx.setTransform(DPR,0,0,DPR,0,0);
   var size=Math.min(W,H)-12;
   cell=size/15; bx=(W-size)/2; by=(H-size)/2;
+  renderTable();
+}
+
+/* Table background — board mez par rakha lagta hai.
+   Ek dafa offscreen render hota hai (resize par), phir har frame sirf drawImage. */
+function renderTable(){
+  if(W<10||H<10)return;
+  tableCv=document.createElement('canvas');
+  tableCv.width=Math.round(W*DPR); tableCv.height=Math.round(H*DPR);
+  var t=tableCv.getContext('2d');
+  t.setTransform(DPR,0,0,DPR,0,0);
+  var g=t.createRadialGradient(W/2,H*0.42,Math.min(W,H)*0.08, W/2,H/2, Math.max(W,H)*0.72);
+  g.addColorStop(0,'#4a2e19');
+  g.addColorStop(0.55,'#2e1c0e');
+  g.addColorStop(1,'#150d05');
+  t.fillStyle=g;
+  t.fillRect(0,0,W,H);
+  t.fillStyle='rgba(212,175,55,0.055)';
+  var step=Math.max(26,cell*1.1), yy, xx;
+  for(yy=step/2; yy<H; yy+=step){
+    for(xx=step/2; xx<W; xx+=step){
+      t.beginPath(); t.arc(xx,yy,1.8,0,6.3); t.fill();
+    }
+  }
+  var bcx=bx+cell*7.5, bcy=by+cell*7.5, R=cell*7.5, a, ang, dx, dy;
+  t.strokeStyle='rgba(212,175,55,0.10)'; t.lineWidth=3;
+  t.beginPath(); t.arc(bcx,bcy,R+cell*1.15,0,6.3); t.stroke();
+  t.strokeStyle='rgba(212,175,55,0.06)'; t.lineWidth=1.5;
+  t.beginPath(); t.arc(bcx,bcy,R+cell*1.55,0,6.3); t.stroke();
+  t.fillStyle='rgba(212,175,55,0.12)';
+  for(a=0;a<8;a++){
+    ang=a*Math.PI/4+Math.PI/8;
+    dx=bcx+Math.cos(ang)*(R+cell*1.35); dy=bcy+Math.sin(ang)*(R+cell*1.35);
+    t.save(); t.translate(dx,dy); t.rotate(ang);
+    t.fillRect(-3,-3,6,6);
+    t.restore();
+  }
+  t.save();
+  t.shadowColor='rgba(0,0,0,0.6)'; t.shadowBlur=42; t.shadowOffsetY=20;
+  t.fillStyle='#2e1c10';
+  rr2(t, bx-6,by-6,cell*15+12,cell*15+12,cell*0.35);
+  t.fill();
+  t.restore();
 }
 window.addEventListener('resize',resize);
 
@@ -585,8 +629,7 @@ function drawBase(c){
 }
 
 function draw(){
-  ctx.fillStyle='#2e1c10';
-  ctx.fillRect(bx-6,by-6,cell*15+12,cell*15+12);
+  if(tableCv) ctx.drawImage(tableCv,0,0,W,H);
   ctx.strokeStyle=GOLD; ctx.lineWidth=5;
   rr(bx-6,by-6,cell*15+12,cell*15+12,cell*0.35); ctx.stroke();
   ctx.strokeStyle=GOLD_LT; ctx.lineWidth=1.5;
