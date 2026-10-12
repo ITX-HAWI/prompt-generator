@@ -299,22 +299,6 @@ drawDice(0);
 var players=[], humanCols=[], turn=0, diceVal=0, sixes=0, moves=[], movableGlow=[];
 var phase='menu', time=0, pendingHumans=1;
 
-/* Fair dice — har player ka apna 12 patton ka shoe:
-   1,1,2,2,3,3,4,4,5,5,6,6 — shuffle karke ek ek patta nikalta hai.
-   Har 12 rolls mein har number exactly 2 baar aata hai,
-   is liye kisi player ke sath zyadti nahi ho sakti. Shoe khatam
-   hone par dobara shuffle ho jata hai. */
-function fairRoll(pl){
-  if(!pl.shoe||pl.shoe.length===0){
-    pl.shoe=[1,1,2,2,3,3,4,4,5,5,6,6];
-    for(var i=pl.shoe.length-1;i>0;i--){
-      var j=Math.floor(Math.random()*(i+1));
-      var t=pl.shoe[i]; pl.shoe[i]=pl.shoe[j]; pl.shoe[j]=t;
-    }
-  }
-  return pl.shoe.pop();
-}
-
 function makePlayers(hcols){
   humanCols=hcols.slice();
   players=ORDER.map(function(c){
@@ -413,7 +397,7 @@ function doRoll(){
   phase='rolling';
   diceBtn.disabled=true;
   sfx.dice();
-  var roll=fairRoll(pl);
+  var roll=1+Math.floor(Math.random()*6);
   animateDice(roll, function(){
     diceVal=roll;
     if(roll===6){
