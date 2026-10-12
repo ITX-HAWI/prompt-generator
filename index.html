@@ -4,258 +4,83 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0b1026">
-<title>Neon Flappy</title>
+<title>Hawi's Arcade</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
-    height:100%; overflow:hidden; background:#0b1026;
+    min-height:100%; background:#0b1026; color:#fff;
     font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
-    touch-action:none; -webkit-user-select:none; user-select:none;
     -webkit-tap-highlight-color: transparent;
   }
-  #game { display:block; width:100vw; height:100vh; }
-  #hud {
-    position:fixed; top:0; left:0; right:0;
-    display:flex; justify-content:space-between; align-items:center;
-    padding:16px 20px; color:#fff; pointer-events:none; z-index:2;
+  body {
+    background: radial-gradient(ellipse at 50% -10%, #2b1a5e 0%, #0b1026 60%) fixed;
+    display:flex; flex-direction:column; align-items:center;
+    padding:32px 18px 48px;
   }
-  #score { font-size:34px; font-weight:800; text-shadow:0 0 14px #00e5ff; }
-  #best { font-size:14px; font-weight:700; letter-spacing:2px; opacity:.75; text-shadow:0 0 10px #ff2fd6; }
-  #overlay {
-    position:fixed; inset:0; z-index:3;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    color:#fff; text-align:center; pointer-events:none; padding:0 24px;
+  header { text-align:center; margin-bottom:8px; }
+  header h1 {
+    font-size:38px; font-weight:900; letter-spacing:4px;
+    text-shadow:0 0 18px #ff2fd6, 0 0 50px #ff2fd6;
   }
-  #overlay h1 { font-size:44px; font-weight:900; letter-spacing:3px;
-    text-shadow:0 0 18px #ff2fd6, 0 0 46px #ff2fd6; margin-bottom:12px; }
-  #overlay p { font-size:17px; opacity:.85; margin:6px 0; }
-  #tapHint { margin-top:20px; font-size:15px; letter-spacing:1px; animation:pulse 1.2s infinite; }
-  @keyframes pulse { 0%,100% {opacity:.45} 50% {opacity:1} }
-  .hidden { display:none !important; }
+  header p { margin-top:8px; font-size:15px; opacity:.7; letter-spacing:2px; }
+  #games {
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
+    gap:16px; width:100%; max-width:560px; margin-top:26px;
+  }
+  .card {
+    background:rgba(255,255,255,0.04);
+    border:2px solid #00e5ff; border-radius:16px;
+    box-shadow:0 0 18px rgba(0,229,255,.25), inset 0 0 24px rgba(0,229,255,.06);
+    padding:22px 12px; text-align:center; cursor:pointer;
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .card:active { transform:scale(.96); }
+  .card .icon { font-size:44px; margin-bottom:10px; }
+  .card h2 { font-size:17px; font-weight:800; letter-spacing:1px; margin-bottom:6px; }
+  .card p { font-size:12.5px; opacity:.65; line-height:1.4; }
+  .card.locked { border-color:#555; box-shadow:none; cursor:default; opacity:.55; }
+  .card.locked:active { transform:none; }
+  .badge {
+    display:inline-block; margin-top:10px; font-size:11px; font-weight:800; letter-spacing:2px;
+    padding:4px 12px; border-radius:20px;
+  }
+  .badge.play { background:#39ff6a; color:#06280f; box-shadow:0 0 12px #39ff6a; }
+  .badge.soon { background:#333; color:#aaa; }
+  footer { margin-top:34px; font-size:13px; opacity:.5; letter-spacing:1px; text-align:center; }
 </style>
 </head>
 <body>
-<canvas id="game"></canvas>
-<div id="hud"><span id="score">0</span><span id="best">BEST 0</span></div>
-<div id="overlay">
-  <h1>NEON FLAPPY</h1>
-  <p id="sub">Tap anywhere to flap through the gates</p>
-  <p id="tapHint">&mdash; tap to start &mdash;</p>
-</div>
+  <header>
+    <h1>HAWI'S ARCADE</h1>
+    <p>PICK YOUR GAME</p>
+  </header>
+  <div id="games"></div>
+  <footer>more games dropping soon 🎮</footer>
 <script>
 (function(){
   'use strict';
-  var canvas = document.getElementById('game');
-  var ctx = canvas.getContext('2d');
-  var scoreEl = document.getElementById('score');
-  var bestEl = document.getElementById('best');
-  var overlay = document.getElementById('overlay');
-  var titleEl = overlay.querySelector('h1');
-  var subEl = document.getElementById('sub');
-  var tapHint = document.getElementById('tapHint');
-
-  var W=0, H=0, DPR=1, stars=[];
-  var GROUND_H = 90;
-  var GRAV = 1900, FLAP_V = -560;
-
-  function resize(){
-    DPR = Math.min(window.devicePixelRatio || 1, 2);
-    W = window.innerWidth; H = window.innerHeight;
-    canvas.width = Math.round(W*DPR); canvas.height = Math.round(H*DPR);
-    canvas.style.width = W+'px'; canvas.style.height = H+'px';
-    ctx.setTransform(DPR,0,0,DPR,0,0);
-    stars = [];
-    for(var i=0;i<90;i++){
-      stars.push({ x:Math.random()*W, y:Math.random()*H*0.72,
-                   r:Math.random()*1.8+0.4, tw:Math.random()*6.28 });
+  var games = [
+    { title:'Neon Flappy', desc:'Tap to flap through the neon gates', icon:'🐤', file:'flappy.html', playable:true },
+    { title:'Neon Snake', desc:'Eat, grow, don\'t crash', icon:'🐍', file:null, playable:false },
+    { title:'Breakout Neon', desc:'Smash every brick', icon:'🧱', file:null, playable:false },
+    { title:'Mystery Game', desc:'???', icon:'❓', file:null, playable:false }
+  ];
+  var wrap = document.getElementById('games');
+  games.forEach(function(g){
+    var card = document.createElement('div');
+    card.className = 'card' + (g.playable ? '' : ' locked');
+    card.innerHTML =
+      '<div class="icon">'+g.icon+'</div>'+
+      '<h2>'+g.title+'</h2>'+
+      '<p>'+g.desc+'</p>'+
+      (g.playable
+        ? '<span class="badge play">PLAY</span>'
+        : '<span class="badge soon">SOON</span>');
+    if(g.playable){
+      card.addEventListener('click', function(){ window.location.href = g.file; });
     }
-  }
-  window.addEventListener('resize', resize);
-  resize();
-
-  var state='ready', bird=null, pipes=[], spawnTimer=0, score=0, best=0, time=0, deathTimer=0, groundX=0;
-
-  try { best = parseInt(localStorage.getItem('neonFlappyBest')||'0',10)||0; } catch(e){ best=0; }
-  bestEl.textContent = 'BEST '+best;
-
-  function reset(){
-    bird = { x: W*0.32, y: H*0.42, vy:0, r:15, rot:0 };
-    pipes = []; spawnTimer=0; score=0; time=0; deathTimer=0; groundX=0;
-    scoreEl.textContent='0';
-  }
-  reset();
-
-  function speed(){ return 230 + Math.min(150, score*6); }
-
-  function spawnPipe(){
-    var gapH = Math.max(150, Math.min(215, H*0.24));
-    var margin = 70;
-    var minY = margin + gapH/2;
-    var maxY = H - GROUND_H - margin - gapH/2;
-    var gapY = minY + Math.random()*Math.max(40,(maxY-minY));
-    pipes.push({ x: W+40, gapY: gapY, gapH: gapH, w: 76, passed:false });
-  }
-
-  function die(){
-    state='over'; deathTimer=0;
-    if(score>best){
-      best=score;
-      try{ localStorage.setItem('neonFlappyBest', String(best)); }catch(e){}
-      bestEl.textContent='BEST '+best;
-    }
-    titleEl.textContent='GAME OVER';
-    subEl.textContent='Score: '+score+'   •   Best: '+best;
-    tapHint.innerHTML='&mdash; tap to retry &mdash;';
-    overlay.classList.remove('hidden');
-  }
-
-  function update(dt){
-    time += dt;
-    if(state==='ready'){
-      bird.y = H*0.42 + Math.sin(time*3)*10;
-      bird.rot = Math.sin(time*3+1)*0.08;
-      return;
-    }
-    if(state==='over'){
-      deathTimer += dt;
-      bird.vy += GRAV*dt; bird.y += bird.vy*dt;
-      bird.rot = Math.min(1.4, bird.rot + dt*4);
-      var floor = H-GROUND_H-bird.r;
-      if(bird.y > floor){ bird.y=floor; bird.vy=0; }
-      return;
-    }
-    bird.vy += GRAV*dt;
-    bird.y += bird.vy*dt;
-    bird.rot = Math.max(-0.45, Math.min(1.35, bird.vy/900));
-    groundX = (groundX + speed()*dt) % 48;
-
-    spawnTimer -= dt;
-    if(spawnTimer<=0){ spawnPipe(); spawnTimer = 300/speed(); }
-    var sp = speed(), i, p;
-    for(i=0;i<pipes.length;i++){
-      p=pipes[i]; p.x -= sp*dt;
-      if(!p.passed && p.x+p.w < bird.x-bird.r){ p.passed=true; score++; scoreEl.textContent=score; }
-    }
-    if(pipes.length && pipes[0].x < -140) pipes.shift();
-
-    var bTop=bird.y-bird.r, bBot=bird.y+bird.r;
-    if(bBot >= H-GROUND_H || bTop <= 0){ die(); return; }
-    for(i=0;i<pipes.length;i++){
-      p=pipes[i];
-      if(bird.x+bird.r > p.x && bird.x-bird.r < p.x+p.w){
-        var gapTop=p.gapY-p.gapH/2, gapBot=p.gapY+p.gapH/2;
-        if(bTop < gapTop || bBot > gapBot){ die(); return; }
-      }
-    }
-  }
-
-  function drawPipe(x,y,w,h,isTop){
-    if(h<=0) return;
-    ctx.save();
-    ctx.shadowColor='#39ff6a'; ctx.shadowBlur=16;
-    var g=ctx.createLinearGradient(x,0,x+w,0);
-    g.addColorStop(0,'#0d8a3a'); g.addColorStop(0.5,'#39ff6a'); g.addColorStop(1,'#0d8a3a');
-    ctx.fillStyle=g;
-    ctx.fillRect(x,y,w,h);
-    ctx.shadowBlur=0;
-    ctx.fillStyle='rgba(255,255,255,0.25)';
-    ctx.fillRect(x+8,y,6,h);
-    ctx.fillStyle='#0a5c28';
-    if(isTop){ ctx.fillRect(x-5,y+h-14,w+10,14); }
-    else { ctx.fillRect(x-5,y,w+10,14); }
-    ctx.restore();
-  }
-
-  function draw(){
-    var g=ctx.createLinearGradient(0,0,0,H);
-    g.addColorStop(0,'#0b1026'); g.addColorStop(0.6,'#1b1440'); g.addColorStop(1,'#2b1a5e');
-    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-
-    var i, s;
-    ctx.save();
-    for(i=0;i<stars.length;i++){
-      s=stars[i];
-      ctx.globalAlpha = 0.35 + 0.65*Math.abs(Math.sin(time*2+s.tw));
-      ctx.fillStyle='#cfe9ff';
-      ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,6.3); ctx.fill();
-    }
-    ctx.restore();
-    ctx.globalAlpha=1;
-
-    for(i=0;i<pipes.length;i++){
-      var p=pipes[i];
-      var gapTop=p.gapY-p.gapH/2, gapBot=p.gapY+p.gapH/2;
-      drawPipe(p.x, 0, p.w, gapTop, true);
-      drawPipe(p.x, gapBot, p.w, H-GROUND_H-gapBot, false);
-    }
-
-    ctx.fillStyle='#0a0d20';
-    ctx.fillRect(0,H-GROUND_H,W,GROUND_H);
-    ctx.save();
-    ctx.shadowColor='#00e5ff'; ctx.shadowBlur=16;
-    ctx.fillStyle='#00e5ff';
-    ctx.fillRect(0,H-GROUND_H,W,4);
-    ctx.restore();
-    ctx.fillStyle='rgba(0,229,255,0.35)';
-    for(var dx=-groundX; dx<W; dx+=48){
-      ctx.fillRect(dx, H-GROUND_H+28, 24, 4);
-    }
-
-    ctx.save();
-    ctx.translate(bird.x, bird.y);
-    ctx.rotate(bird.rot);
-    ctx.shadowColor='#ff2fd6'; ctx.shadowBlur=22;
-    ctx.fillStyle='#ff2fd6';
-    ctx.beginPath(); ctx.arc(0,0,bird.r,0,6.3); ctx.fill();
-    ctx.shadowBlur=0;
-    ctx.fillStyle='#ffffff';
-    ctx.beginPath(); ctx.arc(5,-5,5.5,0,6.3); ctx.fill();
-    ctx.fillStyle='#111111';
-    ctx.beginPath(); ctx.arc(6.5,-5,2.6,0,6.3); ctx.fill();
-    ctx.fillStyle='#ffb300';
-    ctx.beginPath();
-    ctx.moveTo(bird.r-2,-1); ctx.lineTo(bird.r+9,3.5); ctx.lineTo(bird.r-2,8);
-    ctx.closePath(); ctx.fill();
-    ctx.restore();
-  }
-
-  var last=performance.now();
-  function loop(now){
-    var dt=(now-last)/1000; last=now;
-    if(dt>0.05) dt=0.05;
-    update(dt); draw();
-    requestAnimationFrame(loop);
-  }
-  requestAnimationFrame(loop);
-
-  function startFresh(){
-    titleEl.textContent='NEON FLAPPY';
-    subEl.textContent='Tap anywhere to flap through the gates';
-    tapHint.innerHTML='&mdash; tap to start &mdash;';
-    reset();
-    overlay.classList.remove('hidden');
-  }
-
-  function press(e){
-    if(e && e.cancelable) e.preventDefault();
-    if(state==='ready'){
-      state='playing';
-      overlay.classList.add('hidden');
-      bird.vy = FLAP_V;
-    } else if(state==='playing'){
-      bird.vy = FLAP_V;
-    } else if(state==='over' && deathTimer>0.6){
-      state='ready';
-      startFresh();
-    }
-  }
-
-  window.addEventListener('pointerdown', press);
-  window.addEventListener('keydown', function(e){
-    if(e.code==='Space'){ e.preventDefault(); press(e); }
+    wrap.appendChild(card);
   });
-  document.addEventListener('touchmove', function(e){ e.preventDefault(); }, {passive:false});
-  document.addEventListener('gesturestart', function(e){ e.preventDefault(); });
 })();
 </script>
 </body>
