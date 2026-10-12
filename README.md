@@ -11,6 +11,7 @@ A tiny neon mobile game arcade. Open the hub, pick a game, and play!
 ## Games
 
 - **Neon Flappy** (`flappy.html`) — tap to flap through the neon gates. Start menu with options (sound on/off, difficulty: easy/normal/hard), best-score tracking, and sound effects.
+- **Ludo King** (`ludo.html`) — the classic board game. Choose your color, roll a 6 to leave base, race all 4 pieces home, capture rivals — you versus 3 computer opponents.
 - More games coming soon — the hub (`index.html`) is ready for them.
 
 ## How to play Neon Flappy
