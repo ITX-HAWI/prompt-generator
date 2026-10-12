@@ -68,6 +68,18 @@
   .colorBtn:active:not(:disabled) { transform:scale(.9); }
   .colorBtn:disabled { cursor:default; }
   .menuBest { font-size:15px; letter-spacing:2px; opacity:.8; margin-bottom:14px; }
+  #rollsRow { display:flex; gap:8px; justify-content:center; min-height:32px; align-items:center; }
+  .rollBadge { width:30px; height:30px; border-radius:8px; font-size:16px; font-weight:800;
+    display:flex; align-items:center; justify-content:center; color:#3a2a08;
+    background:linear-gradient(135deg,#ffefa8,#d4af37 60%,#8a6508);
+    border:2px solid #6d4f06; box-shadow:0 2px 6px rgba(0,0,0,.4); }
+  #diePopup { position:fixed; z-index:30; transform:translate(-50%,-115%);
+    background:rgba(24,14,7,0.96); border:2px solid #d4af37; border-radius:12px;
+    padding:8px; display:flex; gap:8px; box-shadow:0 4px 18px rgba(0,0,0,.65); }
+  #diePopup button { width:46px; height:46px; font-size:20px; font-weight:800; border-radius:10px;
+    border:2px solid #6d4f06; background:linear-gradient(135deg,#ffefa8,#d4af37);
+    color:#3a2a08; cursor:pointer; font-family:inherit; }
+  #diePopup button:active { transform:scale(.9); }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -80,9 +92,11 @@
   <div id="diceRow">
     <button id="diceBtn" disabled><canvas id="diceCanvas" width="184" height="184"></canvas></button>
   </div>
+  <div id="rollsRow"></div>
   <div id="msg">Welcome!</div>
 </div>
 <div id="wrap"><canvas id="board"></canvas></div>
+<div id="diePopup" class="hidden"></div>
 
 <div id="menu" class="panel">
   <h1>LUDO KING</h1>
@@ -383,6 +397,9 @@ drawDice(0);
 
 /* ================= Game state ================= */
 var players=[], humanCols=[], turn=0, diceVal=0, sixes=0, moves=[], movableGlow=[];
+var rolls=[], turnCaptured=false, popupFor=-1;
+var diePopupEl=document.getElementById('diePopup');
+var rollsRowEl=document.getElementById('rollsRow');
 var phase='menu', time=0, pendingHumans=1;
 
 function makePlayers(hcols){
@@ -464,6 +481,8 @@ function syncTurn(){
 function startTurn(){
   var pl=players[turn];
   diceVal=0; moves=[]; movableGlow=[];
+  rolls=[]; sixes=0; turnCaptured=false; popupFor=-1;
+  hideDiePopup(); renderRolls();
   syncTurn();
   diceBtn.disabled=!pl.human;
   if(pl.human){ setMsg(labelOf(pl)==='You'?'Your turn — roll the dice!':(labelOf(pl)+', roll the dice!')); phase='awaitRoll'; }
@@ -482,91 +501,176 @@ function doRoll(){
   var pl=players[turn];
   phase='rolling';
   diceBtn.disabled=true;
+  hideDiePopup();
   sfx.dice();
   var roll=1+Math.floor(Math.random()*6);
-  animateDice(roll, function(){
-    diceVal=roll;
-    if(roll===6){
-      sixes++; sfx.six();
-      if(sixes>=3){
-        setMsg('Three 6s in a row — turn skipped!');
-        setTimeout(nextPlayer, D(1500));
-        return;
-      }
-    }
-    moves=legalMoves(pl,roll);
-    if(moves.length===0){
-      setMsg('No possible moves.');
-      setTimeout(function(){ endTurn(false); }, D(1300));
+  animateDice(roll, function(){ onRolled(roll); });
+}
+/* roll ke baad: 6 aaye to foran move NAHI — dobara roll; teesra 6 = baari zaya */
+function onRolled(roll){
+  var pl=players[turn];
+  diceVal=roll;
+  if(roll===6){
+    sixes++; sfx.six();
+    if(sixes>=3){
+      setMsg('Three sixes — turn skipped!');
+      setTimeout(nextPlayer, D(1500));
       return;
     }
-    if(roll===6) setMsg((pl.human?'You rolled':'Rolled')+' a 6!');
-    if(pl.human){
-      phase='awaitMove';
-      movableGlow=moves.map(function(m){return m.piece;});
-      setMsg(moves.length>1?'Tap a glowing piece!':'Tap the glowing piece!');
-    } else {
-      phase='aiMove';
-      setTimeout(aiMove, D(800));
-    }
+    rolls.push(6); renderRolls();
+    setMsg(sixes===1?'Six! Roll again…':'Another six! Roll again…');
+    if(pl.human){ phase='awaitRoll'; diceBtn.disabled=false; }
+    else { phase='aiWait'; setTimeout(aiRoll, D(900)); }
+    return;
+  }
+  rolls.push(roll); renderRolls();
+  beginMovePhase();
+}
+/* tamam jama dice ab baari baari gotiyon par lagao */
+function beginMovePhase(){
+  var pl=players[turn];
+  rolls=rolls.filter(function(r){ return legalMoves(pl,r).length>0; });
+  renderRolls();
+  if(rolls.length===0){
+    setMsg('No possible moves.');
+    setTimeout(function(){ endTurn(false); }, D(1300));
+    return;
+  }
+  if(pl.human){
+    phase='awaitMove';
+    updateMovable();
+    setMsg('Tap a glowing piece, then pick a die!');
+  } else {
+    phase='aiMove';
+    setTimeout(aiMove, D(800));
+  }
+}
+function updateMovable(){
+  var pl=players[turn], set={};
+  rolls.forEach(function(r){
+    legalMoves(pl,r).forEach(function(m){ set[m.piece]=1; });
+  });
+  movableGlow=Object.keys(set).map(Number);
+}
+function renderRolls(){
+  rollsRowEl.innerHTML='';
+  rolls.forEach(function(r){
+    var s=document.createElement('span');
+    s.className='rollBadge'; s.textContent=r;
+    rollsRowEl.appendChild(s);
   });
 }
-function afterHumanMove(mv, captured){
-  var pl=players[turn];
-  movableGlow=[];
-  sfx.step();
-  if(captured){ sfx.capture(); setMsg('Captured! Roll again!'); }
-  if(hasWon(pl)) return gameOver(pl);
-  endTurn(diceVal===6||captured);
+function showDiePopup(pieceIdx, options){
+  var pos=layoutPieces();
+  var P=pos[turn+':'+pieceIdx];
+  if(!P){ return; }
+  var r=canvas.getBoundingClientRect();
+  diePopupEl.style.left=(r.left+bx+P.x*cell)+'px';
+  diePopupEl.style.top=(r.top+by+P.y*cell)+'px';
+  diePopupEl.innerHTML='';
+  options.forEach(function(o){
+    var b=document.createElement('button');
+    b.textContent=o.roll;
+    (function(opt){
+      b.addEventListener('click',function(e){
+        e.stopPropagation(); sfx.click(); applyChosen(players[turn],opt);
+      });
+    })(o);
+    diePopupEl.appendChild(b);
+  });
+  diePopupEl.classList.remove('hidden');
+  popupFor=pieceIdx;
+}
+function hideDiePopup(){
+  if(diePopupEl) diePopupEl.classList.add('hidden');
+  popupFor=-1;
 }
 function humanMove(pieceIdx){
-  var pl=players[turn], mv=null;
-  for(var i=0;i<moves.length;i++) if(moves[i].piece===pieceIdx){mv=moves[i];break;}
-  if(!mv) return;
-  afterHumanMove(mv, applyMove(pl,mv));
+  var pl=players[turn];
+  var options=[], seen={};
+  rolls.forEach(function(r){
+    var ms=legalMoves(pl,r);
+    for(var i=0;i<ms.length;i++){
+      if(ms[i].piece===pieceIdx&&!seen[r]){ seen[r]=1; options.push({roll:r,move:ms[i]}); }
+    }
+  });
+  if(options.length===0) return;
+  if(options.length===1){ applyChosen(pl,options[0]); }
+  else{ showDiePopup(pieceIdx,options); }
+}
+function applyChosen(pl, opt){
+  hideDiePopup();
+  var ix=rolls.indexOf(opt.roll);
+  if(ix>=0) rolls.splice(ix,1);
+  var captured=applyMove(pl,opt.move);
+  if(captured){ sfx.capture(); turnCaptured=true; }
+  else sfx.step();
+  if(hasWon(pl)) return gameOver(pl);
+  rolls=rolls.filter(function(r){ return legalMoves(pl,r).length>0; });
+  renderRolls();
+  if(rolls.length===0){
+    if(turnCaptured) setMsg('Captured! Roll again!');
+    endTurn(turnCaptured);
+  }else{
+    updateMovable();
+    setMsg('Tap a glowing piece, then pick a die!');
+  }
 }
 function endTurn(extra){
   moves=[]; movableGlow=[];
+  hideDiePopup();
   if(extra){ startTurn(); }
-  else { sixes=0; turn=(turn+1)%4; startTurn(); }
+  else { turn=(turn+1)%4; startTurn(); }
 }
-function nextPlayer(){ sixes=0; turn=(turn+1)%4; startTurn(); }
+function nextPlayer(){ turn=(turn+1)%4; startTurn(); }
 function aiRoll(){ if(phase==='aiWait') doRoll(); }
 function aiMove(){
   if(phase!=='aiMove') return;
   var pl=players[turn];
-  var mv=chooseAiMove(pl,moves);
-  var captured=applyMove(pl,mv);
-  sfx.step();
-  if(captured) sfx.capture();
-  if(hasWon(pl)) return gameOver(pl);
-  setMsg(labelOf(pl)+(captured?' captured and rolls again!':' moves.'));
-  setTimeout(function(){ endTurn(diceVal===6||captured); }, D(900));
-}
-function chooseAiMove(pl,mvlist){
-  var bestMv=mvlist[0], bestS=-1e9;
-  for(var k=0;k<mvlist.length;k++){
-    var m=mvlist[k], s=Math.random()*5, to=m.to;
-    if(m.from===-1) s+=25;
-    if(to===56) s+=45;
-    else if(to>50) s+=18;
-    else {
-      var idx=trackIdxOf(pl,to);
-      if(SAFE[idx]) s+=12;
-      var cap=false;
-      for(var q=0;q<4;q++){
-        if(players[q]===pl) continue;
-        for(var i=0;i<4;i++){
-          var p=players[q].pieces[i];
-          if(p>=0&&p<=50&&trackIdxOf(players[q],p)===idx) cap=true;
-        }
-      }
-      if(cap) s+=55;
-      s+=to*0.35;
+  var best=null, bestS=-1e9;
+  rolls.forEach(function(r){
+    var ms=legalMoves(pl,r);
+    for(var i=0;i<ms.length;i++){
+      var s=scoreAiMove(pl,ms[i]);
+      if(s>bestS){ bestS=s; best={roll:r,move:ms[i]}; }
     }
-    if(s>bestS){bestS=s;bestMv=m;}
+  });
+  if(!best){ endTurn(false); return; }
+  var ix=rolls.indexOf(best.roll);
+  if(ix>=0) rolls.splice(ix,1);
+  var captured=applyMove(pl,best.move);
+  sfx.step();
+  if(captured){ sfx.capture(); turnCaptured=true; }
+  if(hasWon(pl)) return gameOver(pl);
+  rolls=rolls.filter(function(r){ return legalMoves(pl,r).length>0; });
+  renderRolls();
+  if(rolls.length===0){
+    setMsg(labelOf(pl)+(turnCaptured?' captured and rolls again!':' finishes.'));
+    setTimeout(function(){ endTurn(turnCaptured); }, D(900));
+  }else{
+    setTimeout(aiMove, D(700));
   }
-  return bestMv;
+}
+function scoreAiMove(pl,m){
+  var s=Math.random()*5, to=m.to;
+  if(m.from===-1) s+=25;
+  if(to===56) s+=45;
+  else if(to>50) s+=18;
+  else {
+    var idx=trackIdxOf(pl,to);
+    if(SAFE[idx]) s+=12;
+    var cap=false;
+    for(var q=0;q<4;q++){
+      if(players[q]===pl) continue;
+      for(var i=0;i<4;i++){
+        var p=players[q].pieces[i];
+        if(p>=0&&p<=50&&trackIdxOf(players[q],p)===idx) cap=true;
+      }
+    }
+    if(cap) s+=55;
+    s+=to*0.35;
+  }
+  return s;
 }
 function gameOver(pl){
   phase='over';
@@ -774,13 +878,18 @@ function canvasTap(e){
   else { tx=e.clientX; ty=e.clientY; }
   var gx=(tx-r.left-bx)/cell, gy=(ty-r.top-by)/cell;
   var pos=layoutPieces(), bestPick=-1, bestD=1e9;
-  for(var i=0;i<moves.length;i++){
-    var ci=moves[i].piece, P=pos[turn+':'+ci];
+  for(var i=0;i<movableGlow.length;i++){
+    var ci=movableGlow[i], P=pos[turn+':'+ci];
     if(!P) continue;
     var d=Math.hypot(P.x-gx,P.y-gy);
     if(d<0.75&&d<bestD){bestD=d;bestPick=ci;}
   }
-  if(bestPick>=0){ sfx.click(); humanMove(bestPick); }
+  if(bestPick>=0){
+    if(popupFor===bestPick){ hideDiePopup(); return; }
+    sfx.click(); humanMove(bestPick);
+  }else{
+    hideDiePopup();
+  }
 }
 canvas.addEventListener('pointerdown',function(e){e.preventDefault();canvasTap(e);});
 document.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
@@ -794,7 +903,7 @@ document.getElementById('btnMenuTop').addEventListener('click',function(e){
 document.getElementById('btnAgain').addEventListener('click',function(e){
   e.stopPropagation();sfx.click();
   showPanel(null);
-  sixes=0; makePlayers(humanCols); startTurn();
+  makePlayers(humanCols); startTurn();
 });
 document.getElementById('btnHub').addEventListener('click',function(e){
   e.stopPropagation();sfx.click(); window.location.href='index.html';
@@ -860,7 +969,6 @@ function pickColor(c){
   }else{
     showPanel(null);
     makePlayers(humanCols);
-    sixes=0;
     resize(); startTurn();
   }
 }
