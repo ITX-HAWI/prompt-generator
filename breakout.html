@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#0b1026">
-<title>Breakout Neon</title>
+<meta name="theme-color" content="#F7F4EE">
+<title>Breakout</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
-    height:100%; overflow:hidden; background:#0b1026; color:#fff;
+    height:100%; overflow:hidden; background:#F7F4EE; color:#1E1B16;
     font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
     touch-action:none; -webkit-user-select:none; user-select:none;
     -webkit-tap-highlight-color: transparent;
@@ -17,34 +17,33 @@
   #overlay {
     position:fixed; inset:0; z-index:3;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    background:radial-gradient(ellipse at 50% 30%, rgba(43,26,94,.92) 0%, rgba(11,16,38,.96) 70%);
+    background:rgba(247,244,238,.97);
     text-align:center; padding:20px;
   }
   #overlay.hidden { display:none; }
   #overlay h1 {
-    font-size:44px; font-weight:900; letter-spacing:6px;
-    text-shadow:0 0 18px #00e5ff, 0 0 60px #00e5ff; margin-bottom:6px;
+    font-size:44px; font-weight:800; letter-spacing:10px; padding-left:10px;
+    color:#1E1B16; margin-bottom:12px;
   }
-  #overlay .sub { font-size:14px; opacity:.65; letter-spacing:3px; margin-bottom:30px; }
+  #overlay .rule { width:56px; height:2px; background:#A8822F; margin:0 auto 22px; }
+  #overlay .sub { font-size:13px; color:rgba(30,27,22,.55); letter-spacing:4px; margin-bottom:30px; }
   .btn {
-    display:block; width:230px; margin:9px auto; padding:14px 0;
-    font-size:19px; font-weight:800; letter-spacing:3px; color:#fff;
-    background:rgba(0,229,255,.08); border:2px solid #00e5ff; border-radius:14px;
-    box-shadow:0 0 16px rgba(0,229,255,.35), inset 0 0 14px rgba(0,229,255,.08);
+    display:block; width:230px; margin:9px auto; padding:14px 0 14px 4px;
+    font-size:16px; font-weight:700; letter-spacing:4px; color:#1E1B16;
+    background:transparent; border:1.5px solid #1E1B16; border-radius:12px;
     cursor:pointer; transition:transform .1s ease;
   }
-  .btn:active { transform:scale(.95); }
-  .btn.magenta { border-color:#ff2fd6; background:rgba(255,47,214,.08);
-    box-shadow:0 0 16px rgba(255,47,214,.35), inset 0 0 14px rgba(255,47,214,.08); }
+  .btn:active { transform:scale(.96); }
+  .btn.solid { background:#1E1B16; color:#F7F4EE; }
   .opt-row { display:flex; align-items:center; justify-content:space-between; width:280px; margin:12px auto; }
-  .opt-row .label { font-size:15px; letter-spacing:2px; opacity:.8; }
+  .opt-row .label { font-size:15px; letter-spacing:2px; color:rgba(30,27,22,.65); }
   .opt-row .val {
-    min-width:130px; padding:10px 0; font-size:15px; font-weight:800; letter-spacing:2px;
-    border:2px solid #ff2fd6; border-radius:10px; color:#fff; cursor:pointer;
-    background:rgba(255,47,214,.08); box-shadow:0 0 12px rgba(255,47,214,.3);
+    min-width:130px; padding:10px 0; font-size:15px; font-weight:700; letter-spacing:2px;
+    border:1.5px solid #A8822F; border-radius:10px; color:#1E1B16; cursor:pointer;
+    background:transparent;
   }
-  #stat { margin-top:18px; font-size:14px; letter-spacing:2px; opacity:.7; }
-  #stat b { color:#ffe14d; }
+  #stat { margin-top:18px; font-size:14px; letter-spacing:2px; color:rgba(30,27,22,.6); }
+  #stat b { color:#A8822F; }
 </style>
 </head>
 <body>
@@ -129,7 +128,8 @@ var trail = [];
 var banner = null;
 var shake = 0;
 
-var BRICK_COLORS = ['#ff2fd6','#b14bff','#00e5ff','#39ff6a','#ffe14d','#ff7a1a'];
+var BRICK_TONES = ['#221E18','#2B251C','#342E21','#3D3727','#463F2D','#4F4834','#58513B','#615843'];
+var INK = '#1E1B16', GOLD = '#A8822F';
 var FIELD = { top: 96, side: 14, gap: 6, cols: 7 };
 
 function layoutField(){
@@ -165,7 +165,7 @@ function buildLevel(lv){
         y: FIELD.top + r*(bh + FIELD.gap),
         w: bw, h: bh,
         hp: hp, maxHp: hp,
-        color: BRICK_COLORS[r % BRICK_COLORS.length]
+        color: BRICK_TONES[r % BRICK_TONES.length]
       });
     }
   }
@@ -320,8 +320,8 @@ function render(){
   ctx.save();
   if (shake > 0) ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
 
-  var g = ctx.createRadialGradient(W/2, -H*0.1, 10, W/2, H*0.4, H);
-  g.addColorStop(0, '#2b1a5e'); g.addColorStop(0.6, '#0b1026'); g.addColorStop(1, '#070b1d');
+  var g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#FBF9F5'); g.addColorStop(1, '#F0EAE0');
   ctx.fillStyle = g; ctx.fillRect(-20, -20, W+40, H+40);
   ctx.shadowBlur = 0;
 
@@ -330,39 +330,34 @@ function render(){
     for (i = 0; i < bricks.length; i++){
       b = bricks[i];
       ctx.globalAlpha = 0.35 + 0.65 * (b.hp / b.maxHp);
-      ctx.shadowColor = b.color; ctx.shadowBlur = 12;
+      ctx.shadowColor = 'rgba(30,27,22,0.18)'; ctx.shadowBlur = 6;
       ctx.fillStyle = b.color;
       rr(b.x, b.y, b.w, b.h, 5); ctx.fill();
       ctx.shadowBlur = 0; ctx.globalAlpha = 1;
       if (b.maxHp > 1){
-        ctx.fillStyle = 'rgba(255,255,255,.85)';
+        ctx.fillStyle = GOLD;
         ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(String(b.hp), b.x + b.w/2, b.y + b.h/2 + 1);
       }
     }
     for (i = 0; i < trail.length; i++){
       var tp = trail[i], ta = i / trail.length;
-      ctx.globalAlpha = ta * 0.35;
-      ctx.fillStyle = '#ff2fd6';
+      ctx.globalAlpha = ta * 0.22;
+      ctx.fillStyle = INK;
       ctx.beginPath(); ctx.arc(tp.x, tp.y, ball.r * ta, 0, Math.PI*2); ctx.fill();
     }
     ctx.globalAlpha = 1;
     // paddle
-    ctx.shadowColor = '#00e5ff'; ctx.shadowBlur = 16;
-    ctx.fillStyle = '#00e5ff';
+    ctx.save();
+    ctx.shadowColor = 'rgba(30,27,22,0.28)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 3;
+    ctx.fillStyle = INK;
     rr(paddle.x - paddle.w/2, paddle.y - paddle.h/2, paddle.w, paddle.h, 7); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = 'rgba(255,255,255,.55)';
-    rr(paddle.x - paddle.w/2 + 6, paddle.y - paddle.h/2 + 3, paddle.w - 12, 4, 2); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = 'rgba(247,244,238,.35)';
+    rr(paddle.x - paddle.w/2 + 8, paddle.y - paddle.h/2 + 3, paddle.w - 16, 3, 1.5); ctx.fill();
     // ball
-    ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18;
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = INK;
     ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.shadowColor = '#ff2fd6'; ctx.shadowBlur = 10;
-    ctx.fillStyle = '#ff2fd6';
-    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r*0.45, 0, Math.PI*2); ctx.fill();
-    ctx.shadowBlur = 0;
     // particles
     for (i = 0; i < particles.length; i++){
       var p = particles[i];
@@ -374,31 +369,29 @@ function render(){
     // HUD
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#fff'; ctx.font = '800 20px sans-serif';
+    ctx.fillStyle = INK; ctx.font = '800 20px sans-serif';
     ctx.fillText(String(score), 16, 34);
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffe14d'; ctx.font = '700 13px sans-serif';
+    ctx.fillStyle = GOLD; ctx.font = '700 13px sans-serif';
     ctx.fillText('BEST ' + best, W/2, 32);
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#00e5ff';
+    ctx.fillStyle = 'rgba(30,27,22,.55)';
     ctx.fillText('LV ' + level, W - 16, 32);
-    ctx.textAlign = 'left'; ctx.font = '16px sans-serif';
-    var hearts = '';
-    for (var li = 0; li < lives; li++) hearts += '❤';
-    ctx.fillStyle = '#ff2fd6';
-    ctx.fillText(hearts, 16, 58);
+    ctx.textAlign = 'left'; ctx.font = '15px sans-serif';
+    var dots = '';
+    for (var li = 0; li < lives; li++) dots += '●';
+    ctx.fillStyle = GOLD;
+    ctx.fillText(dots, 16, 58);
     if (ball.stuck && state === 'playing'){
-      ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.75)';
+      ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(30,27,22,.55)';
       ctx.font = '700 15px sans-serif';
       ctx.fillText('TAP TO LAUNCH', W/2, H - 160);
     }
     if (banner && performance.now() < banner.until){
       ctx.textAlign = 'center';
-      ctx.font = '900 40px sans-serif';
-      ctx.shadowColor = '#00e5ff'; ctx.shadowBlur = 24;
-      ctx.fillStyle = '#fff';
+      ctx.font = '800 38px sans-serif';
+      ctx.fillStyle = INK;
       ctx.fillText(banner.text, W/2, H/2);
-      ctx.shadowBlur = 0;
     } else banner = null;
   }
   ctx.restore();
@@ -414,10 +407,11 @@ function showOverlay(html){
 function showMenu(){
   state = 'menu';
   showOverlay(
-    '<h1>BREAKOUT<br>NEON</h1>' +
+    '<h1>BREAKOUT</h1>' +
+    '<div class="rule"></div>' +
     '<div class="sub">SMASH EVERY BRICK</div>' +
-    '<button class="btn" data-act="start">START</button>' +
-    '<button class="btn magenta" data-act="options">OPTIONS</button>' +
+    '<button class="btn solid" data-act="start">START</button>' +
+    '<button class="btn" data-act="options">OPTIONS</button>' +
     '<button class="btn" data-act="exit">EXIT</button>' +
     '<div id="stat">BEST <b>' + best + '</b></div>'
   );
@@ -431,16 +425,17 @@ function showOptions(){
       '<button class="val" data-act="sound">' + (soundOn ? 'ON' : 'OFF') + '</button></div>' +
     '<div class="opt-row"><span class="label">DIFFICULTY</span>' +
       '<button class="val" data-act="diff">' + DIFFS[difficulty].label + '</button></div>' +
-    '<button class="btn magenta" data-act="menu" style="margin-top:22px">BACK</button>'
+    '<button class="btn" data-act="menu" style="margin-top:22px">BACK</button>'
   );
 }
 function showGameOver(){
   showOverlay(
-    '<h1 style="font-size:34px; text-shadow:0 0 18px #ff2fd6, 0 0 60px #ff2fd6">GAME OVER</h1>' +
+    '<h1 style="font-size:34px">GAME OVER</h1>' +
+    '<div class="rule"></div>' +
     '<div class="sub">LEVEL ' + level + ' REACHED</div>' +
     '<div id="stat" style="font-size:20px; margin-bottom:14px">SCORE <b>' + score + '</b><br>BEST <b>' + best + '</b></div>' +
-    '<button class="btn" data-act="start">RETRY</button>' +
-    '<button class="btn magenta" data-act="menu">MENU</button>'
+    '<button class="btn solid" data-act="start">RETRY</button>' +
+    '<button class="btn" data-act="menu">MENU</button>'
   );
 }
 function wireButtons(){
