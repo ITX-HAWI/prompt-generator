@@ -208,6 +208,21 @@
     pointer-events:none; text-align:center; letter-spacing:.5px;
     box-shadow:0 4px 20px rgba(0,0,0,.5);
   }
+  #custBar {
+    position:fixed; top:0; left:0; right:0; z-index:8;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    padding:10px; background:rgba(8,10,12,.88);
+  }
+  #custBar span { color:#E8B93C; font-size:13px; font-weight:800; letter-spacing:2px; }
+  #custBar button {
+    padding:8px 16px; border-radius:8px; border:1.5px solid #E8B93C;
+    background:transparent; color:#fff; font-weight:800; font-size:12px; letter-spacing:1px;
+    cursor:pointer; font-family:inherit;
+  }
+  #custBar button:active { transform:scale(.95); }
+  body.customizing .firebtn, body.customizing #scopeBtn {
+    outline:2px dashed #E8B93C; outline-offset:4px;
+  }
 </style>
 </head>
 <body>
@@ -249,6 +264,12 @@
 <div id="overlay"></div>
 </div>
 <div id="rotHint" class="hidden">📱 Phone ko landscape ghumao</div>
+<div id="custBar" class="hidden">
+  <span>DRAG KARO</span>
+  <button id="custSave">SAVE</button>
+  <button id="custReset">RESET</button>
+  <button id="custBack">BACK</button>
+</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (function(){
@@ -545,6 +566,9 @@ function buildHero(id){
     hair.position.set(0, 0.755, 0.018); torsoG.add(hair);
     var cuffL = wrapRing(0.062, 0.012, M.trim); cuffL.position.set(0, -0.22, 0); aL.el.add(cuffL);
     var cuffR = wrapRing(0.062, 0.012, M.trim); cuffR.position.set(0, -0.22, 0); aR.el.add(cuffR);
+    var emb = box(0.1, 0.14, 0.02, M.trim2, 0, 0.30, 0.26); emb.rotation.z = Math.PI/4; torsoG.add(emb);
+    torsoG.add(box(0.02, 0.4, 0.015, M.trim, -0.09, 0.20, 0.25));
+    torsoG.add(box(0.02, 0.4, 0.015, M.trim, 0.09, 0.20, 0.25));
   } else if (id === 'shadow'){
     torsoG.add(cyl(0.215, 0.16, 0.42, M.armor, 0, 0.30, 0, 18));    // chest armor
     torsoG.add(box(0.21, 0.05, 0.03, M.trim, 0, 0.76, -0.135));     // visor
@@ -553,6 +577,10 @@ function buildHero(id){
     var seamR = wrapRing(0.09, 0.008, M.armor); seamR.position.set(0, -0.12, 0); P.legR.add(seamR);
     var padL = sph(0.075, M.armor, 0, -0.36, -0.05, 10, 8); padL.scale.set(1, 1, 0.7); P.legL.add(padL);
     var padR = sph(0.075, M.armor, 0, -0.36, -0.05, 10, 8); padR.scale.set(1, 1, 0.7); P.legR.add(padR);
+    torsoG.add(box(0.03, 0.4, 0.015, M.trim, 0, 0.30, 0.19));
+    var capeS = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.46),
+      new THREE.MeshStandardMaterial({ color:0x1A1B20, roughness:0.85, side:THREE.DoubleSide }));
+    capeS.position.set(0, 0.28, 0.23); capeS.rotation.x = 0.14; torsoG.add(capeS);
   } else if (id === 'pharaoh'){
     torsoG.add(cyl(0.225, 0.175, 0.44, M.gold, 0, 0.30, 0, 18));     // chest plate
     torsoG.add(cyl(0.20, 0.34, 0.44, M.suit, 0, -0.20, 0, 18));      // kilt
@@ -566,10 +594,17 @@ function buildHero(id){
     crown.position.set(0, 0.95, 0); crown.castShadow = true; torsoG.add(crown);
     var abL = wrapRing(0.066, 0.014, M.gold); abL.position.set(0, -0.12, 0); aL.el.add(abL);
     var abR = wrapRing(0.066, 0.014, M.gold); abR.position.set(0, -0.12, 0); aR.el.add(abR);
+    torsoG.add(sph(0.04, M.gem, 0, 0.38, 0.19, 10, 8));
+    var capeP = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.46),
+      new THREE.MeshStandardMaterial({ color:0xF1ECDD, roughness:0.85, side:THREE.DoubleSide }));
+    capeP.position.set(0, 0.28, 0.22); capeP.rotation.x = 0.14; torsoG.add(capeP);
+    torsoG.add(box(0.46, 0.03, 0.012, M.gold, 0, 0.06, 0.27));
   } else { // agent
     torsoG.add(box(0.062, 0.36, 0.016, M.dark, 0, 0.30, -0.20));     // tie
     torsoG.add(box(0.075, 0.08, 0.02, M.dark, 0, 0.50, -0.195));     // knot
     torsoG.add(box(0.21, 0.055, 0.03, M.dark, 0, 0.77, -0.132));     // sunglasses
+    var beltA = wrapRing(0.16, 0.025, M.dark); beltA.position.set(0, 0.02, 0); torsoG.add(beltA);
+    torsoG.add(box(0.02, 0.3, 0.012, M.dark, 0, 0.18, 0.19));        // back vent
   }
 
   /* ---- guns in right hand (rifle / sniper) ---- */
@@ -833,6 +868,7 @@ function scatterDecor(){
 function onResize(){
   W = window.innerWidth; H = window.innerHeight;
   VW = rotEl.clientWidth || W; VH = rotEl.clientHeight || H;
+  applyBtnLayout();
   if (!renderer) return;
   camera.aspect = VW/VH;
   camera.updateProjectionMatrix();
@@ -1059,10 +1095,10 @@ function update(dt){
   var fx = -Math.sin(yaw)*Math.cos(pitch),
       fy = Math.sin(pitch),
       fz = -Math.cos(yaw)*Math.cos(pitch);
-  var cx = player.x - fx*3.8, cy = 2.1 - fy*3.8, cz = player.z - fz*3.8;
+  var cx = player.x - fx*3.45, cy = 2.0 - fy*3.45, cz = player.z - fz*3.45;
   if (cy < 0.7) cy = 0.7;
   camera.position.set(cx, cy, cz);
-  camera.lookAt(player.x + fx*8, 1.5 + fy*8, player.z + fz*8);
+  camera.lookAt(player.x + fx*8, 1.4 + fy*8, player.z + fz*8);
 
   // enemies
   spawnT -= dt;
@@ -1178,6 +1214,7 @@ function startGame(){
   weaponPanel.classList.remove('hidden');
   crosshair.classList.remove('hidden');
   renderSlots();
+  applyBtnLayout();
   for (var s=0;s<3;s++) spawnEnemy();
   updateHUD();
 }
@@ -1248,6 +1285,8 @@ function showOptions(){
       '<button class="val" id="oHero">'+HEROS[heroIdx].icon+' '+HEROS[heroIdx].name+'</button></div>' +
     '<div class="opt-row"><span class="label">SENSITIVITY</span>' +
       '<button class="val" id="oSens">'+SENS[sensIdx].n+'</button></div>' +
+    '<div class="opt-row"><span class="label">BUTTONS</span>' +
+      '<button class="val" id="oCust">CUSTOMIZE</button></div>' +
     '<div class="opt-row"><span class="label">ROTATE</span>' +
       '<button class="val" id="oOrient">'+orientLabel()+'</button></div>' +
     '<br><button class="btn solid" id="bBack">BACK</button>';
@@ -1262,6 +1301,7 @@ function showOptions(){
     document.getElementById('oHero').textContent = HEROS[heroIdx].icon+' '+HEROS[heroIdx].name;
   });
   wireButton('oOrient', function(){ toggleOrient(); });
+  wireButton('oCust', function(){ showCustomize(); });
   wireButton('oSens', function(){
     sensIdx = (sensIdx + 1) % SENS.length;
     store.set('sens', String(sensIdx));
@@ -1307,6 +1347,7 @@ function switchGun(i){
   sfx.click();
 }
 function startFire(e){
+  if (customizing) return;
   if (e) e.preventDefault();
   fire();
   stopFire();
@@ -1322,6 +1363,104 @@ fireBtnL.addEventListener('pointerdown', startFire);
 });
 document.getElementById('wSlot0').addEventListener('click', function(){ switchGun(0); });
 document.getElementById('wSlot1').addEventListener('click', function(){ switchGun(1); });
+
+/* ================= button layout customization ================= */
+var btnLayout = {};
+try { btnLayout = JSON.parse(store.get('btnlayout', '{}')) || {}; } catch(e){ btnLayout = {}; }
+var CUST_BTNS = ['fireBtn', 'fireBtnL', 'scopeBtn'];
+var customizing = false, dragBtn = null, dragS = 0, dragDX = 0, dragDY = 0;
+function btnSize(id){
+  if (id === 'fireBtn') return 96;
+  if (id === 'fireBtnL') return 62;
+  return 60;
+}
+function defaultBtnPos(id){
+  var s = btnSize(id);
+  if (id === 'fireBtn') return { fx: 1 - (22 + s/2)/VW, fy: 1 - (104 + s/2)/VH };
+  if (id === 'fireBtnL') return { fx: (22 + s/2)/VW, fy: 1 - (216 + s/2)/VH };
+  return { fx: 1 - (134 + s/2)/VW, fy: 1 - (124 + s/2)/VH };
+}
+function applyBtnLayout(){
+  for (var i = 0; i < CUST_BTNS.length; i++){
+    var id = CUST_BTNS[i], el = document.getElementById(id);
+    var p = btnLayout[id];
+    if (p){
+      var s = btnSize(id);
+      el.style.left = (p.fx * VW - s/2) + 'px';
+      el.style.top = (p.fy * VH - s/2) + 'px';
+      el.style.right = 'auto'; el.style.bottom = 'auto';
+    } else {
+      el.style.left = ''; el.style.top = '';
+      el.style.right = ''; el.style.bottom = '';
+    }
+  }
+}
+function showCustomize(){
+  state = 'customize';
+  customizing = true;
+  document.body.classList.add('customizing');
+  overlayEl.classList.add('hidden');
+  pauseBtn.classList.add('hidden'); rotBtn.classList.add('hidden');
+  fireBtn.classList.remove('hidden'); fireBtnL.classList.remove('hidden'); scopeBtn.classList.remove('hidden');
+  crosshair.classList.add('hidden'); weaponPanel.classList.add('hidden');
+  for (var i = 0; i < CUST_BTNS.length; i++){
+    var id = CUST_BTNS[i];
+    if (!btnLayout[id]) btnLayout[id] = defaultBtnPos(id);
+  }
+  applyBtnLayout();
+  document.getElementById('custBar').classList.remove('hidden');
+}
+function saveLayout(){
+  for (var i = 0; i < CUST_BTNS.length; i++){
+    var id = CUST_BTNS[i], el = document.getElementById(id);
+    var s = btnSize(id);
+    var lx = parseFloat(el.style.left), ty = parseFloat(el.style.top);
+    if (!isNaN(lx) && !isNaN(ty)) btnLayout[id] = { fx: (lx + s/2)/VW, fy: (ty + s/2)/VH };
+  }
+  store.set('btnlayout', JSON.stringify(btnLayout));
+}
+function exitCustomize(save){
+  if (save) saveLayout();
+  else { try { btnLayout = JSON.parse(store.get('btnlayout', '{}')) || {}; } catch(e){ btnLayout = {}; } }
+  customizing = false;
+  dragBtn = null;
+  document.body.classList.remove('customizing');
+  document.getElementById('custBar').classList.add('hidden');
+  applyBtnLayout();
+  showMenu();
+}
+document.getElementById('custSave').addEventListener('click', function(){ exitCustomize(true); });
+document.getElementById('custBack').addEventListener('click', function(){ exitCustomize(false); });
+document.getElementById('custReset').addEventListener('click', function(){
+  btnLayout = {};
+  store.set('btnlayout', '{}');
+  for (var i = 0; i < CUST_BTNS.length; i++) btnLayout[CUST_BTNS[i]] = defaultBtnPos(CUST_BTNS[i]);
+  applyBtnLayout();
+});
+CUST_BTNS.forEach(function(id){
+  var el = document.getElementById(id);
+  el.addEventListener('pointerdown', function(e){
+    if (!customizing) return;
+    e.preventDefault(); e.stopPropagation();
+    dragBtn = el; dragS = btnSize(id);
+    var p = mapPt(e.clientX, e.clientY);
+    dragDX = p.x - parseFloat(el.style.left || '0');
+    dragDY = p.y - parseFloat(el.style.top || '0');
+    if (el.setPointerCapture && e.pointerId !== undefined){
+      try { el.setPointerCapture(e.pointerId); } catch(err){}
+    }
+  });
+});
+document.addEventListener('pointermove', function(e){
+  if (!customizing || !dragBtn) return;
+  var p = mapPt(e.clientX, e.clientY);
+  var nx = Math.max(0, Math.min(VW - dragS, p.x - dragDX));
+  var ny = Math.max(0, Math.min(VH - dragS, p.y - dragDY));
+  dragBtn.style.left = nx + 'px'; dragBtn.style.top = ny + 'px';
+  dragBtn.style.right = 'auto'; dragBtn.style.bottom = 'auto';
+});
+document.addEventListener('pointerup', function(){ dragBtn = null; });
+document.addEventListener('pointercancel', function(){ dragBtn = null; });
 function setZoom(z){
   zoomed = z;
   if (camera){ camera.fov = z ? 42 : 62; camera.updateProjectionMatrix(); }
