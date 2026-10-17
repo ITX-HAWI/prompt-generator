@@ -8,7 +8,7 @@
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
-    height:100%; overflow:hidden; background:#F7F4EE; color:#1E1B16;
+    height:100%; overflow:hidden; background:#0c0e10; color:#fff;
     font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
     touch-action:none; -webkit-user-select:none; user-select:none;
     -webkit-tap-highlight-color: transparent;
@@ -21,140 +21,216 @@
   }
   #scene { position:absolute; inset:0; }
   #scene canvas { display:block; }
+  .hidden { display:none !important; }
+
+  /* ============ PUBG-style HUD ============ */
   #hud {
     position:fixed; top:0; left:0; right:0; z-index:2;
     display:flex; justify-content:space-between; align-items:flex-start;
-    padding:14px 18px; pointer-events:none;
+    padding:8px 10px; pointer-events:none;
   }
-  #hud .col { display:flex; flex-direction:column; align-items:center; min-width:70px; }
-  #hud .label { font-size:10px; font-weight:700; letter-spacing:3px; color:rgba(30,27,22,.5); }
-  #hud .big { font-size:30px; font-weight:800; color:#1E1B16; line-height:1.1; }
-  #hud .sub2 { font-size:12px; font-weight:700; letter-spacing:1px; color:#A8822F; }
-  #hpbar { width:120px; height:8px; border-radius:4px; background:rgba(30,27,22,.15); margin-top:6px; overflow:hidden; }
-  #hpfill { height:100%; width:100%; border-radius:4px; background:#3E9B4F; transition:width .2s; }
+  #pubgStats {
+    background:rgba(12,14,16,.55); border-radius:8px; padding:7px 10px;
+    color:#fff; font-size:13px; font-weight:700; letter-spacing:.5px;
+    display:flex; flex-direction:column; gap:3px; min-width:120px;
+  }
+  #pubgStats .statline { display:flex; align-items:center; gap:6px; }
+  #pubgStats .sic { font-size:12px; }
+  #pubgStats b { font-size:14px; }
+  #killedV { color:#E8B93C; }
+  #scoreRow {
+    font-size:10px; font-weight:700; letter-spacing:1.5px; color:rgba(255,255,255,.75);
+    border-top:1px solid rgba(255,255,255,.25); padding-top:4px; white-space:nowrap;
+  }
+  #scoreRow b { color:#E8B93C; font-size:13px; }
+  #bestV { color:rgba(255,255,255,.5); font-size:9px; margin-left:4px; }
+  #compassWrap { display:flex; flex-direction:column; align-items:center; }
+  #compass { width:min(44vw,300px); height:40px; border-radius:6px; background:rgba(12,14,16,.55); }
+  #timeV {
+    margin-top:3px; font-size:11px; font-weight:800; letter-spacing:2px; color:#fff;
+    background:rgba(12,14,16,.55); border-radius:6px; padding:2px 10px;
+  }
+  #mmWrap { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+  #minimap {
+    width:92px; height:92px; border-radius:10px;
+    border:2px solid rgba(255,255,255,.65); background:rgba(12,14,16,.6);
+  }
+  #mmBtns { display:flex; gap:8px; pointer-events:auto; }
+  .mmbtn {
+    width:40px; height:40px; border-radius:50%; font-size:17px; color:#fff;
+    background:rgba(12,14,16,.5); border:1.5px solid rgba(255,255,255,.55);
+    cursor:pointer; font-family:inherit;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .mmbtn:active { transform:scale(.9); }
+
   #comboTag {
-    position:fixed; top:104px; left:0; right:0; z-index:2; text-align:center;
-    font-size:15px; font-weight:800; letter-spacing:3px; color:#A8822F;
-    pointer-events:none; opacity:0; transition:opacity .2s;
+    position:fixed; top:50%; left:0; right:0; z-index:2; text-align:center;
+    font-size:17px; font-weight:800; letter-spacing:3px; color:#E8B93C;
+    text-shadow:0 1px 4px rgba(0,0,0,.65);
+    pointer-events:none; opacity:0; transition:opacity .2s; margin-top:46px;
   }
   #crosshair {
     position:fixed; left:50%; top:50%; z-index:2; pointer-events:none;
-    width:34px; height:34px; margin:-17px 0 0 -17px;
-    transition:transform .08s;
+    width:30px; height:30px; margin:-15px 0 0 -15px;
+    transition:transform .08s; filter:drop-shadow(0 1px 2px rgba(0,0,0,.7));
   }
   #crosshair:before, #crosshair:after {
-    content:''; position:absolute; background:rgba(30,27,22,.85);
+    content:''; position:absolute; background:rgba(255,255,255,.95);
   }
-  #crosshair:before { left:16px; top:4px; width:2px; height:26px; }
-  #crosshair:after { top:16px; left:4px; height:2px; width:26px; }
+  #crosshair:before { left:14px; top:3px; width:2px; height:24px; }
+  #crosshair:after { top:14px; left:3px; height:2px; width:24px; }
   #crosshair .dot {
-    position:absolute; left:14px; top:14px; width:6px; height:6px; border-radius:50%;
-    background:#A8822F;
+    position:absolute; left:12.5px; top:12.5px; width:5px; height:5px; border-radius:50%;
+    background:#E8B93C;
   }
+  #hitmark {
+    position:fixed; left:50%; top:50%; width:34px; height:34px; margin:-17px 0 0 -17px;
+    z-index:2; pointer-events:none;
+  }
+  #hitmark i {
+    position:absolute; left:16px; top:2px; width:2.5px; height:30px; background:#fff;
+    box-shadow:0 0 4px rgba(0,0,0,.8);
+  }
+  #hitmark i:first-child { transform:rotate(45deg); }
+  #hitmark i:last-child { transform:rotate(-45deg); }
   #dmgflash {
     position:fixed; inset:0; z-index:3; pointer-events:none; opacity:0;
     background:radial-gradient(ellipse at center, transparent 55%, rgba(180,30,30,.55) 100%);
     transition:opacity .15s;
   }
-  #pauseBtn {
-    position:fixed; top:14px; left:14px; z-index:4;
-    width:44px; height:44px; border-radius:50%;
-    font-size:14px; color:#1E1B16; cursor:pointer; font-family:inherit;
-    background:rgba(247,244,238,.85); border:1.5px solid #1E1B16;
+
+  .firebtn {
+    position:fixed; z-index:4; border-radius:50%; cursor:pointer; font-family:inherit;
+    background:rgba(12,14,16,.42); border:2px solid rgba(255,255,255,.6);
+    display:flex; align-items:center; justify-content:center;
   }
-  #pauseBtn:active { transform:scale(.92); }
-  #rotBtn {
-    position:fixed; top:14px; right:14px; z-index:4;
-    width:44px; height:44px; border-radius:50%;
-    font-size:19px; color:#1E1B16; cursor:pointer; font-family:inherit;
-    background:rgba(247,244,238,.85); border:1.5px solid #1E1B16;
+  .firebtn:active { transform:scale(.9); background:rgba(232,185,60,.35); }
+  #fireBtn { right:22px; bottom:104px; width:96px; height:96px; }
+  #fireBtnL { left:22px; bottom:216px; width:62px; height:62px; }
+  #scopeBtn {
+    position:fixed; right:134px; bottom:124px; z-index:4; width:60px; height:60px; border-radius:50%;
+    background:rgba(12,14,16,.42); border:2px solid rgba(255,255,255,.6); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; font-family:inherit;
   }
-  #rotBtn:active { transform:scale(.92); }
-  #pauseBtn.hidden, .hidden { display:none !important; }
-  #fireBtn {
-    position:fixed; right:26px; bottom:34px; z-index:4;
-    width:92px; height:92px; border-radius:50%;
-    font-size:15px; font-weight:800; letter-spacing:2px; color:#F7F4EE;
-    background:#1E1B16; border:3px solid #A8822F; cursor:pointer; font-family:inherit;
-    box-shadow:0 4px 18px rgba(30,27,22,.35);
+  #scopeBtn.zoom { background:rgba(232,185,60,.45); }
+
+  #weaponPanel {
+    position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:2;
+    display:flex; flex-direction:column; align-items:center; pointer-events:none; gap:5px;
   }
-  #fireBtn:active { transform:scale(.9); }
+  #wRow {
+    display:flex; align-items:center; gap:10px;
+    background:rgba(12,14,16,.55); border-radius:8px; padding:6px 12px;
+  }
+  #wAuto { font-size:10px; font-weight:800; letter-spacing:1px; color:#E8B93C; }
+  #wAmmo { font-size:15px; font-weight:800; color:#fff; }
+  #hpbar {
+    width:210px; height:9px; border-radius:5px; background:rgba(12,14,16,.55);
+    overflow:hidden; border:1px solid rgba(255,255,255,.35);
+  }
+  #hpfill { height:100%; width:100%; border-radius:5px; background:#f2f2f2; transition:width .2s; }
+  #levelV {
+    font-size:10px; font-weight:800; letter-spacing:2px; color:#E8B93C;
+    text-shadow:0 1px 3px rgba(0,0,0,.7);
+  }
+
   #joyBase {
-    position:fixed; z-index:3; width:110px; height:110px; margin:-55px 0 0 -55px;
-    border:2px solid rgba(30,27,22,.35); border-radius:50%; pointer-events:none;
-    display:none; background:rgba(247,244,238,.25);
+    position:fixed; z-index:3; width:124px; height:124px; margin:-62px 0 0 -62px;
+    border:2px solid rgba(255,255,255,.55); border-radius:50%; pointer-events:none;
+    display:none; background:rgba(12,14,16,.28);
   }
   #joyNub {
-    position:fixed; z-index:3; width:48px; height:48px; margin:-24px 0 0 -24px;
-    background:rgba(30,27,22,.75); border-radius:50%; pointer-events:none; display:none;
+    position:fixed; z-index:3; width:54px; height:54px; margin:-27px 0 0 -27px;
+    background:rgba(255,255,255,.8); border-radius:50%; pointer-events:none; display:none;
+    box-shadow:0 2px 8px rgba(0,0,0,.4);
   }
-  .scorepop {
-    position:fixed; z-index:3; pointer-events:none;
-    font-size:22px; font-weight:800; color:#1E1B16;
-    animation:rise .8s ease-out forwards;
+
+  #feed {
+    position:fixed; top:120px; left:0; right:0; z-index:2; pointer-events:none;
+    display:flex; flex-direction:column; align-items:center; gap:6px;
   }
-  .scorepop.gold { color:#A8822F; font-size:30px; }
-  @keyframes rise {
-    from { transform:translateY(0); opacity:1; }
-    to { transform:translateY(-52px); opacity:0; }
+  .feedpill {
+    background:rgba(12,14,16,.72); color:#fff; font-size:13px; font-weight:700;
+    padding:6px 14px; border-radius:6px; letter-spacing:.5px;
+    border-left:3px solid #E8B93C;
+    animation:feedin .25s ease-out;
   }
+  .feedpill.gold { color:#E8B93C; }
+  @keyframes feedin {
+    from { transform:translateY(-8px); opacity:0; }
+    to { transform:none; opacity:1; }
+  }
+
+  /* ============ PUBG lobby-style overlays ============ */
   #overlay {
     position:fixed; inset:0; z-index:5;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    background:rgba(247,244,238,.96);
+    background:rgba(8,10,12,.93);
     text-align:center; padding:20px;
   }
   #overlay.hidden { display:none; }
   #overlay h1 {
-    font-size:38px; font-weight:800; letter-spacing:8px; padding-left:8px;
-    color:#1E1B16; margin-bottom:12px;
+    font-size:40px; font-weight:800; letter-spacing:8px; padding-left:8px;
+    color:#fff; margin-bottom:12px; text-shadow:0 2px 12px rgba(0,0,0,.6);
   }
-  #overlay .rule { width:56px; height:2px; background:#A8822F; margin:0 auto 22px; }
-  #overlay .sub { font-size:13px; color:rgba(30,27,22,.55); letter-spacing:4px; margin-bottom:14px; }
-  #overlay .howto { font-size:13px; color:rgba(30,27,22,.7); letter-spacing:1px; line-height:1.9; margin-bottom:22px; }
-  #overlay .err { font-size:14px; color:#a33; max-width:300px; line-height:1.5; margin-bottom:20px; }
+  #overlay .rule { width:56px; height:3px; background:#E8B93C; margin:0 auto 22px; }
+  #overlay .sub { font-size:13px; color:rgba(255,255,255,.6); letter-spacing:4px; margin-bottom:14px; }
+  #overlay .howto { font-size:13px; color:rgba(255,255,255,.78); letter-spacing:1px; line-height:1.9; margin-bottom:22px; }
+  #overlay .err { font-size:14px; color:#ff8a8a; max-width:300px; line-height:1.5; margin-bottom:20px; }
   .btn {
     display:block; width:230px; margin:9px auto; padding:14px 0 14px 4px;
-    font-size:16px; font-weight:700; letter-spacing:4px; color:#1E1B16;
-    background:transparent; border:1.5px solid #1E1B16; border-radius:12px;
+    font-size:16px; font-weight:700; letter-spacing:4px; color:#fff;
+    background:rgba(255,255,255,.06); border:1.5px solid rgba(255,255,255,.4); border-radius:10px;
     cursor:pointer; transition:transform .1s ease; font-family:inherit;
   }
   .btn:active { transform:scale(.96); }
-  .btn.solid { background:#1E1B16; color:#F7F4EE; }
+  .btn.solid { background:#E8B93C; border-color:#E8B93C; color:#141414; }
   .opt-row { display:flex; align-items:center; justify-content:space-between; width:280px; margin:12px auto; }
-  .opt-row .label { font-size:15px; letter-spacing:2px; color:rgba(30,27,22,.65); }
+  .opt-row .label { font-size:15px; letter-spacing:2px; color:rgba(255,255,255,.7); }
   .opt-row .val {
     min-width:150px; padding:10px 0; font-size:14px; font-weight:700; letter-spacing:1px;
-    border:1.5px solid #A8822F; border-radius:10px; color:#1E1B16; cursor:pointer;
-    background:transparent; font-family:inherit;
+    border:1.5px solid #E8B93C; border-radius:10px; color:#fff; cursor:pointer;
+    background:rgba(255,255,255,.06); font-family:inherit;
   }
-  #stat { margin-top:18px; font-size:14px; letter-spacing:2px; color:rgba(30,27,22,.6); }
-  #stat b { color:#A8822F; }
+  #stat { margin-top:18px; font-size:14px; letter-spacing:2px; color:rgba(255,255,255,.65); }
+  #stat b { color:#E8B93C; }
 </style>
 </head>
 <body>
 <div id="rot">
 <div id="scene"></div>
 <div id="hud">
-  <div class="col" style="min-width:44px"></div>
-  <div class="col">
-    <div class="label">SCORE</div>
-    <div class="big" id="scoreV">0</div>
-    <div class="sub2" id="bestV">BEST 0</div>
-    <div id="hpbar"><div id="hpfill"></div></div>
+  <div id="pubgStats">
+    <span class="statline"><span class="sic">🏃</span>Alive&nbsp;<b id="aliveV">0</b></span>
+    <span class="statline"><span class="sic">💀</span>Killed&nbsp;<b id="killedV">0</b></span>
+    <div id="scoreRow">SCORE&nbsp;<b id="scoreV">0</b><span id="bestV"></span></div>
   </div>
-  <div class="col">
-    <div class="label">TIME</div>
-    <div class="big" id="timeV">1:00</div>
-    <div class="sub2" id="levelV">LV 1</div>
+  <div id="compassWrap">
+    <canvas id="compass" width="300" height="40"></canvas>
+    <div id="timeV">1:00</div>
+  </div>
+  <div id="mmWrap">
+    <canvas id="minimap" width="104" height="104"></canvas>
+    <div id="mmBtns">
+      <button id="pauseBtn" class="hidden mmbtn" title="Menu">⚙</button>
+      <button id="rotBtn" class="hidden mmbtn" title="Rotate 9:16 / 16:9">⟳</button>
+    </div>
   </div>
 </div>
+<div id="feed"></div>
 <div id="comboTag"></div>
 <div id="dmgflash"></div>
 <div id="crosshair" class="hidden"><div class="dot"></div></div>
-<button id="pauseBtn" class="hidden">&#10074;&#10074;</button>
-<button id="rotBtn" class="hidden" title="Rotate 9:16 / 16:9">&#10227;</button>
-<button id="fireBtn" class="hidden">FIRE</button>
+<div id="hitmark" class="hidden"><i></i><i></i></div>
+<button id="scopeBtn" class="hidden" title="Aim zoom"><svg viewBox="0 0 40 40" width="26" height="26"><circle cx="20" cy="20" r="11" fill="none" stroke="#fff" stroke-width="2.5"/><path d="M20 2v10M20 28v10M2 20h10M28 20h10" stroke="#fff" stroke-width="2.5"/></svg></button>
+<button id="fireBtnL" class="hidden firebtn" title="Fire"><svg viewBox="0 0 24 48" width="16" height="32"><path d="M12 2 C16 8 18 14 18 22 L18 32 L6 32 L6 22 C6 14 8 8 12 2 Z" fill="rgba(255,255,255,.92)"/><rect x="6" y="34" width="12" height="12" rx="2" fill="rgba(255,255,255,.92)"/></svg></button>
+<button id="fireBtn" class="hidden firebtn" title="Fire"><svg viewBox="0 0 24 48" width="24" height="48"><path d="M12 2 C16 8 18 14 18 22 L18 32 L6 32 L6 22 C6 14 8 8 12 2 Z" fill="rgba(255,255,255,.92)"/><rect x="6" y="34" width="12" height="12" rx="2" fill="rgba(255,255,255,.92)"/></svg></button>
+<div id="weaponPanel" class="hidden">
+  <div id="wRow"><span id="wAuto">Auto</span><svg viewBox="0 0 120 36" width="104" height="31"><path d="M4 22 L28 22 L34 14 L44 14 L48 20 L78 20 L84 12 L92 12 L96 20 L116 20 L116 25 L96 25 L92 30 L84 30 L80 25 L52 25 L48 32 L40 32 L36 25 L4 25 Z" fill="rgba(255,255,255,.92)"/></svg><span id="wAmmo">∞</span></div>
+  <div id="hpbar"><div id="hpfill"></div></div>
+  <div id="levelV">LV 1</div>
+</div>
 <div id="joyBase"></div>
 <div id="joyNub"></div>
 <div id="overlay"></div>
@@ -192,6 +268,15 @@ var dmgflash = document.getElementById('dmgflash');
 var pauseBtn = document.getElementById('pauseBtn');
 var rotBtn = document.getElementById('rotBtn');
 var rotEl = document.getElementById('rot');
+var aliveV = document.getElementById('aliveV');
+var killedV = document.getElementById('killedV');
+var feedEl = document.getElementById('feed');
+var hitmark = document.getElementById('hitmark');
+var scopeBtn = document.getElementById('scopeBtn');
+var fireBtnL = document.getElementById('fireBtnL');
+var weaponPanel = document.getElementById('weaponPanel');
+var compC = document.getElementById('compass'), compX = null;
+var mmC = document.getElementById('minimap'), mmX = null;
 var fireBtn = document.getElementById('fireBtn');
 var crosshair = document.getElementById('crosshair');
 var joyBase = document.getElementById('joyBase');
@@ -259,6 +344,7 @@ var sfx = {
 var state = 'menu'; // menu | options | playing | gameover
 var paused = false;
 var score = 0, combo = 0, comboT = 0, level = 1, elapsed = 0, spawnT = 0;
+var kills = 0, zoomed = false;
 var hp = 100, lastDmgT = -99;
 var GAME_LEN = 60;
 var yaw = 0, pitch = -0.05;
@@ -575,6 +661,10 @@ function initThree(){
   raycaster = new THREE.Raycaster();
   CENTER2 = new THREE.Vector2(0, 0);
   particleGeo = new THREE.BoxGeometry(0.09, 0.09, 0.09);
+  try {
+    compX = compC.getContext('2d');
+    mmX = mmC.getContext('2d');
+  } catch(e){}
 
   scene.add(new THREE.HemisphereLight(0xfffbf0, 0xd8cdb8, 0.8));
   var sun = new THREE.DirectionalLight(0xffffff, 0.85);
@@ -638,24 +728,88 @@ function burst(pos, colorHex, n){
 }
 function popup(text, gold){
   var d = document.createElement('div');
-  d.className = 'scorepop' + (gold ? ' gold' : '');
+  d.className = 'feedpill' + (gold ? ' gold' : '');
   d.textContent = text;
-  d.style.left = (VW/2 - 24) + 'px'; d.style.top = (VH/2 - 70) + 'px';
-  document.body.appendChild(d);
-  setTimeout(function(){ if (d.parentNode) d.parentNode.removeChild(d); }, 850);
+  feedEl.appendChild(d);
+  while (feedEl.children.length > 3) feedEl.removeChild(feedEl.children[0]);
+  setTimeout(function(){ if (d.parentNode) d.parentNode.removeChild(d); }, 1500);
 }
 function updateHUD(){
   scoreV.textContent = score;
   bestV.textContent = 'BEST ' + Math.max(best, score);
+  var alive = 0, ei;
+  for (ei = 0; ei < enemies.length; ei++) if (!enemies[ei].dying) alive++;
+  aliveV.textContent = alive;
+  killedV.textContent = kills;
   var tl = Math.max(0, Math.ceil(GAME_LEN - elapsed));
   timeV.textContent = Math.floor(tl/60) + ':' + ('0' + (tl%60)).slice(-2);
   levelV.textContent = 'LV ' + level;
   hpfill.style.width = Math.max(0, hp) + '%';
-  hpfill.style.background = hp > 50 ? '#3E9B4F' : (hp > 25 ? '#D9A441' : '#C0392B');
+  hpfill.style.background = hp > 25 ? '#f2f2f2' : '#e05252';
   if (combo >= 2){
     comboTag.textContent = 'COMBO ×' + combo;
     comboTag.style.opacity = 1;
   } else comboTag.style.opacity = 0;
+}
+
+/* ================= PUBG compass + minimap ================= */
+function drawCompass(){
+  if (!compX) return;
+  var w = compC.width, h = compC.height;
+  compX.clearRect(0, 0, w, h);
+  var heading = ((-yaw * 180 / Math.PI) % 360 + 360) % 360;
+  var pxPerDeg = w / 120, mid = w / 2;
+  compX.textAlign = 'center';
+  var labels = { 0:'N', 45:'NE', 90:'E', 135:'SE', 180:'S', 225:'SW', 270:'W', 315:'NW' };
+  var d, deg, x, norm;
+  for (d = -75; d <= 75; d += 5){
+    deg = Math.round((heading + d) / 5) * 5;
+    x = mid + (deg - heading) * pxPerDeg;
+    if (x < -10 || x > w + 10) continue;
+    norm = ((deg % 360) + 360) % 360;
+    if (norm % 45 === 0){
+      compX.fillStyle = (norm === 0) ? '#E8B93C' : 'rgba(255,255,255,.92)';
+      compX.font = '700 14px system-ui, sans-serif';
+      compX.fillText(labels[norm], x, 17);
+    } else {
+      compX.fillStyle = 'rgba(255,255,255,.45)';
+      compX.fillRect(x, 24, 1.5, 7);
+      if (norm % 15 === 0){
+        compX.fillStyle = 'rgba(255,255,255,.6)';
+        compX.font = '9px system-ui, sans-serif';
+        compX.fillText(String(norm), x, 38);
+      }
+    }
+  }
+  compX.fillStyle = '#E8B93C';
+  compX.beginPath();
+  compX.moveTo(mid - 6, 1); compX.lineTo(mid + 6, 1); compX.lineTo(mid, 9);
+  compX.closePath(); compX.fill();
+}
+function drawMinimap(){
+  if (!mmX) return;
+  var s = mmC.width;
+  mmX.clearRect(0, 0, s, s);
+  function mx(x){ return (x + 8) / 16 * s; }
+  function mz(z){ return (z + 2) / 14 * s; }
+  mmX.strokeStyle = 'rgba(232,185,60,.5)';
+  mmX.lineWidth = 1.5;
+  mmX.strokeRect(3, 3, s - 6, s - 6);
+  var i, e;
+  for (i = 0; i < enemies.length; i++){
+    e = enemies[i];
+    if (e.dying) continue;
+    mmX.fillStyle = '#ff5252';
+    mmX.beginPath(); mmX.arc(mx(e.x), mz(e.z), 3, 0, 6.3); mmX.fill();
+  }
+  var px = mx(player.x), py = mz(player.z);
+  mmX.save();
+  mmX.translate(px, py);
+  mmX.rotate(Math.atan2(-Math.sin(yaw), Math.cos(yaw)));
+  mmX.fillStyle = '#E8B93C';
+  mmX.beginPath(); mmX.moveTo(0, -6); mmX.lineTo(4.5, 5); mmX.lineTo(-4.5, 5);
+  mmX.closePath(); mmX.fill();
+  mmX.restore();
 }
 
 /* ================= combat ================= */
@@ -683,13 +837,16 @@ function fire(){
     e.x += kdx/kd*0.6; e.z += kdz/kd*0.6;
     e.hitFlash = 0.12;
     for (var fi=0;fi<e.flashMats.length;fi++){ e.flashMats[fi].emissive.setHex(0xFF2222); e.flashMats[fi].emissiveIntensity = 0.8; }
+    hitmark.classList.remove('hidden');
+    setTimeout(function(){ hitmark.classList.add('hidden'); }, 120);
     combo++; comboT = 0;
     var pts = 10;
     if (e.hp <= 0){
       e.dying = true; e.dieT = 0;
+      kills++;
       burst(h.point, 0xB4452F, 14);
       pts = 25 + (combo >= 2 ? (combo-1)*5 : 0);
-      popup('+' + pts, combo >= 3);
+      popup('🧟 +' + pts, combo >= 3);
       sfx.kill(combo);
     } else {
       sfx.hit();
@@ -836,6 +993,7 @@ function loop(t){
   var dt = Math.min((t-lastT)/1000, 0.05);
   lastT = t;
   if (state === 'playing' && !paused && threeOK) update(dt);
+  if (threeOK){ drawCompass(); drawMinimap(); }
   if (renderer) renderer.render(scene, camera);
 }
 
@@ -845,6 +1003,7 @@ function startGame(){
   state = 'playing';
   paused = false;
   score = 0; combo = 0; comboT = 0; level = 1; elapsed = 0; spawnT = 0;
+  kills = 0;
   hp = 100; lastDmgT = -99;
   yaw = 0; pitch = -0.05;
   player.x = 0; player.z = 8;
@@ -857,6 +1016,9 @@ function startGame(){
   pauseBtn.classList.remove('hidden');
   rotBtn.classList.remove('hidden');
   fireBtn.classList.remove('hidden');
+  fireBtnL.classList.remove('hidden');
+  scopeBtn.classList.remove('hidden');
+  weaponPanel.classList.remove('hidden');
   crosshair.classList.remove('hidden');
   for (var s=0;s<3;s++) spawnEnemy();
   updateHUD();
@@ -870,6 +1032,9 @@ function gameOver(reason){
   pauseBtn.classList.add('hidden');
   rotBtn.classList.add('hidden');
   fireBtn.classList.add('hidden');
+  fireBtnL.classList.add('hidden');
+  scopeBtn.classList.add('hidden');
+  weaponPanel.classList.add('hidden');
   crosshair.classList.add('hidden');
   overlayEl.classList.remove('hidden');
   overlayEl.innerHTML =
@@ -895,6 +1060,9 @@ function showMenu(){
   pauseBtn.classList.add('hidden');
   rotBtn.classList.add('hidden');
   fireBtn.classList.add('hidden');
+  fireBtnL.classList.add('hidden');
+  scopeBtn.classList.add('hidden');
+  weaponPanel.classList.add('hidden');
   crosshair.classList.add('hidden');
   overlayEl.classList.remove('hidden');
   var err = threeOK ? '' : '<div class="err">3D ke liye internet chahiye (three.js load nahi hua). WiFi/data on karke dobara kholo.</div>';
@@ -955,12 +1123,22 @@ function doPause(){
 /* ================= input ================= */
 pauseBtn.addEventListener('click', function(){ sfx.click(); doPause(); });
 rotBtn.addEventListener('click', function(){ sfx.click(); toggleOrient(); });
+fireBtnL.addEventListener('pointerdown', function(e){ e.preventDefault(); fire(); });
+function setZoom(z){
+  zoomed = z;
+  if (camera){ camera.fov = z ? 42 : 62; camera.updateProjectionMatrix(); }
+  scopeBtn.classList.toggle('zoom', z);
+}
+scopeBtn.addEventListener('pointerdown', function(e){ e.preventDefault(); setZoom(true); });
+scopeBtn.addEventListener('pointerup', function(){ setZoom(false); });
+scopeBtn.addEventListener('pointercancel', function(){ setZoom(false); });
+scopeBtn.addEventListener('pointerleave', function(){ setZoom(false); });
 fireBtn.addEventListener('pointerdown', function(e){ e.preventDefault(); fire(); });
 document.addEventListener('touchstart', function(e){
   if (state !== 'playing' || paused) return;
   for (var i=0;i<e.changedTouches.length;i++){
     var t = e.changedTouches[i];
-    if (t.target === fireBtn || t.target === pauseBtn || t.target === rotBtn) continue;
+    if (t.target === fireBtn || t.target === fireBtnL || t.target === scopeBtn || t.target === pauseBtn || t.target === rotBtn) continue;
     var p = mapPt(t.clientX, t.clientY);
     if (p.x < VW*0.45 && joy.id === null){
       joy.id = t.identifier; joy.ox = p.x; joy.oy = p.y;
