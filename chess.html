@@ -3,44 +3,45 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#F7F4EE">
+<meta name="theme-color" content="#0b1026">
 <title>Chess</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
-    height:100%; overflow:hidden; background:#F7F4EE; color:#1E1B16;
+    height:100%; overflow:hidden; background:#0b1026;
     font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
     touch-action:none; -webkit-user-select:none; user-select:none;
     -webkit-tap-highlight-color: transparent;
   }
   body { display:flex; flex-direction:column; }
-  #topbar { padding:10px 14px 6px; color:#1E1B16; z-index:5;
+  #topbar { padding:10px 14px 6px; color:#fff; z-index:5;
     display:flex; flex-direction:column; gap:6px; }
   #turnRow { display:flex; align-items:center; justify-content:space-between; }
   #turnInd { display:flex; align-items:center; gap:10px; font-weight:800; letter-spacing:1px; font-size:16px; }
-  #turnDot { width:20px; height:20px; border-radius:50%; background:#fff;
-    border:2px solid #A8822F; }
-  #status { font-size:13px; color:rgba(30,27,22,0.6); text-align:center; min-height:18px; letter-spacing:.5px; }
-  #btnMenuTop { padding:8px 16px; font-size:13px; font-weight:800; letter-spacing:1px; color:#1E1B16;
-    background:transparent; border:1.5px solid #1E1B16; border-radius:12px; cursor:pointer; font-family:inherit; }
+  #turnDot { width:20px; height:20px; border-radius:50%; background:#f5f5f5;
+    border:2px solid #999; box-shadow:0 0 10px rgba(255,255,255,.4); }
+  #status { font-size:13px; opacity:.8; text-align:center; min-height:18px; letter-spacing:.5px; }
+  #btnMenuTop { padding:8px 16px; font-size:13px; font-weight:800; letter-spacing:1px; color:#fff;
+    background:rgba(255,255,255,.06); border:2px solid #888; border-radius:10px; cursor:pointer; font-family:inherit; }
   #wrap { flex:1; position:relative; display:flex; align-items:center; justify-content:center; }
   #board { display:block; }
   .panel { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column;
-    align-items:center; justify-content:center; color:#1E1B16; text-align:center;
-    padding:0 24px; background:rgba(247,244,238,0.97); }
-  .panel h1 { font-size:38px; font-weight:800; letter-spacing:10px; padding-left:10px; margin-bottom:12px;
-    color:#1E1B16; }
-  .panel p { font-size:15px; color:rgba(30,27,22,0.65); margin:8px 0 18px; max-width:340px; line-height:1.5; letter-spacing:1px; }
-  .btn { display:block; width:260px; margin:8px 0; padding:14px 0 14px 4px; font-size:16px; font-weight:700;
-    letter-spacing:4px; color:#1E1B16; background:transparent; border:1.5px solid #1E1B16;
-    border-radius:12px; cursor:pointer; font-family:inherit; transition:transform .1s ease; }
+    align-items:center; justify-content:center; color:#fff; text-align:center;
+    padding:0 24px; background:rgba(5,8,25,0.85); }
+  .panel h1 { font-size:38px; font-weight:900; letter-spacing:4px; margin-bottom:10px;
+    text-shadow:0 0 18px #ff2fd6, 0 0 46px #ff2fd6; }
+  .panel p { font-size:15px; opacity:.85; margin:8px 0 18px; max-width:340px; line-height:1.5; }
+  .btn { display:block; width:260px; margin:8px 0; padding:14px 0; font-size:17px; font-weight:800;
+    letter-spacing:2px; color:#fff; background:rgba(0,229,255,0.08); border:2px solid #00e5ff;
+    border-radius:14px; box-shadow:0 0 16px rgba(0,229,255,.35); cursor:pointer; font-family:inherit; }
   .btn:active { transform:scale(.96); }
-  .btn.primary { background:#1E1B16; color:#F7F4EE; }
-  .btn.danger { border-color:#a3402f; color:#a3402f; }
-  .menuBest { font-size:15px; letter-spacing:2px; color:rgba(30,27,22,0.6); margin-bottom:14px; }
+  .btn.primary { border-color:#ff2fd6; background:rgba(255,47,214,.12);
+    box-shadow:0 0 18px rgba(255,47,214,.45); }
+  .btn.danger { border-color:#ff5555; box-shadow:0 0 14px rgba(255,85,85,.3); }
+  .menuBest { font-size:15px; letter-spacing:2px; opacity:.8; margin-bottom:14px; }
   #promoRow { display:flex; gap:12px; margin:4px 0 16px; }
   .promoBtn { width:64px; height:64px; font-size:38px; border-radius:14px; cursor:pointer;
-    background:#fff; border:1.5px solid #A8822F; color:#1E1B16; }
+    background:rgba(255,255,255,.08); border:2px solid #ffd700; color:#fff; }
   .promoBtn:active { transform:scale(.92); }
   .hidden { display:none !important; }
 </style>
@@ -102,6 +103,13 @@
   <p id="winSub"></p>
   <button id="btnAgain" class="btn primary">&#8635;&nbsp;&nbsp;PLAY AGAIN</button>
   <button id="btnHub" class="btn">&#127968;&nbsp;&nbsp;GAMES MENU</button>
+</div>
+<div id="pause" class="panel hidden">
+  <h1>PAUSED</h1>
+  <p>Take a breather</p>
+  <button id="btnResume" class="btn primary">&#9654;&nbsp;&nbsp;RESUME</button>
+  <button id="btnPauseMenu" class="btn">&#127968;&nbsp;&nbsp;GAME MENU</button>
+  <button id="btnPauseHub" class="btn">&#8962;&nbsp;&nbsp;HOME</button>
 </div>
 
 <script>
@@ -332,7 +340,7 @@ var wrap=document.getElementById('wrap');
 var turnDot=document.getElementById('turnDot');
 var turnName=document.getElementById('turnName');
 var statusEl=document.getElementById('status');
-var PANELS=['menu','options','modesetup','colorsetup','promo','gameover'];
+var PANELS=['menu','options','modesetup','colorsetup','promo','gameover','pause'];
 
 var S=0,DPR=1; // board px
 function resize(){
@@ -410,8 +418,8 @@ function newGame(){
 function isHumanTurn(){return mode==='2p'||st.turn===humanColor;}
 function colorName(c){return c==='w'?'White':'Black';}
 function syncTop(){
-  turnDot.style.background=st.turn==='w'?'#FFFFFF':'#1E1B16';
-  turnDot.style.borderColor=st.turn==='w'?'#A8822F':'#1E1B16';
+  turnDot.style.background=st.turn==='w'?'#f5f5f5':'#222';
+  turnDot.style.borderColor=st.turn==='w'?'#999':'#555';
   var who;
   if(mode==='2p')who=colorName(st.turn)+' to move';
   else if(st.turn===humanColor)who='Your turn ('+colorName(st.turn)+')';
@@ -486,7 +494,7 @@ function gameOver(kind,winner){
 }
 
 /* ================= Drawing ================= */
-var LIGHT='#F7F4EE',DARK='#E6DCC3';
+var LIGHT='#eed9b7',DARK='#9c6b43';
 function sqXY(i){ // display coords
   var r=i>>3,c=i&7;
   if(flipped){r=7-r;c=7-c;}
@@ -498,8 +506,8 @@ function draw(){
   ctx.clearRect(0,0,S,S);
   /* frame */
   ctx.save();
-  ctx.shadowColor='rgba(30,27,22,0.15)';ctx.shadowBlur=12;
-  ctx.fillStyle='#FFFFFF';
+  ctx.shadowColor='#00e5ff';ctx.shadowBlur=18;
+  ctx.fillStyle='#141b33';
   ctx.fillRect(0,0,S,S);
   ctx.restore();
   var pad=sq*0.28, bs=S-pad*2, cell=bs/8, ox=pad, oy=pad;
@@ -518,15 +526,15 @@ function draw(){
     ctx.fillStyle=color;
     ctx.fillRect(X(p[0]),Y(p[1]),cell,cell);
   }
-  if(lastMove){hl(lastMove.from,'rgba(168,130,47,0.28)');hl(lastMove.to,'rgba(168,130,47,0.38)');}
-  if(checkSq>=0)hl(checkSq,'rgba(192,73,47,0.45)');
+  if(lastMove){hl(lastMove.from,'rgba(255,215,0,0.35)');hl(lastMove.to,'rgba(255,215,0,0.45)');}
+  if(checkSq>=0)hl(checkSq,'rgba(255,60,60,0.55)');
   if(selected>=0){
     var sp=sqXY(selected);
-    ctx.strokeStyle='#A8822F';ctx.lineWidth=3;
+    ctx.strokeStyle='#ffd700';ctx.lineWidth=3;
     ctx.strokeRect(X(sp[0])+2,Y(sp[1])+2,cell-4,cell-4);
   }
   /* coordinates */
-  ctx.fillStyle='rgba(30,27,22,0.55)';
+  ctx.fillStyle='rgba(0,0,0,0.55)';
   ctx.font='bold '+(cell*0.22)+'px sans-serif';
   ctx.textAlign='left';ctx.textBaseline='top';
   for(var f=0;f<8;f++){
@@ -539,22 +547,22 @@ function draw(){
   ctx.textAlign='left';ctx.textBaseline='top';
   for(var ff=0;ff<8;ff++){
     var fileCh=String.fromCharCode(97+(flipped?7-ff:ff));
-    ctx.fillStyle='rgba(30,27,22,0.55)';
+    ctx.fillStyle=((7+ff)%2===0)?'rgba(120,70,30,0.8)':'rgba(255,240,210,0.8)';
     ctx.fillText(fileCh,X(ff)+4,Y(7)+cell*0.74);
   }
   for(var rk=0;rk<8;rk++){
     var rankCh=String(flipped?rk+1:8-rk);
-    ctx.fillStyle='rgba(30,27,22,0.55)';
+    ctx.fillStyle=((rk)%2===0)?'rgba(120,70,30,0.8)':'rgba(255,240,210,0.8)';
     ctx.fillText(rankCh,X(0)+3,Y(rk)+3);
   }
   /* move dots */
   selMoves.forEach(function(m){
     var p=sqXY(m.to),cx=X(p[0])+cell/2,cy=Y(p[1])+cell/2;
     if(m.cap){
-      ctx.strokeStyle='rgba(168,130,47,0.9)';ctx.lineWidth=3;
+      ctx.strokeStyle='rgba(200,30,30,0.85)';ctx.lineWidth=3;
       ctx.beginPath();ctx.arc(cx,cy,cell*0.42,0,6.3);ctx.stroke();
     }else{
-      ctx.fillStyle='rgba(30,27,22,0.35)';
+      ctx.fillStyle='rgba(20,40,20,0.35)';
       ctx.beginPath();ctx.arc(cx,cy,cell*0.14,0,6.3);ctx.fill();
     }
   });
@@ -570,32 +578,38 @@ function draw(){
     var s2=sqXY(selected);
     var pulse=0.5+0.5*Math.sin(time*6);
     ctx.save();
-    ctx.strokeStyle='#A8822F';ctx.lineWidth=3;
-    ctx.shadowColor='rgba(168,130,47,0.5)';ctx.shadowBlur=8+6*pulse;
+    ctx.strokeStyle='#ffd700';ctx.lineWidth=3;
+    ctx.shadowColor='#ffd700';ctx.shadowBlur=10+8*pulse;
     ctx.beginPath();ctx.arc(X(s2[0])+cell/2,Y(s2[1])+cell/2,cell*0.44,0,6.3);ctx.stroke();
     ctx.restore();
   }
 }
 function drawPiece(px,py,pr,piece){
-  /* soft shadow */
   ctx.save();
-  ctx.fillStyle='rgba(30,27,22,0.18)';
+  ctx.fillStyle='rgba(0,0,0,0.35)';
   ctx.beginPath();
-  ctx.ellipse(px,py+pr*0.34,pr*0.82,pr*0.5,0,0,6.3);
+  ctx.ellipse(px+pr*0.10,py+pr*0.34,pr*0.82,pr*0.5,0,0,6.3);
   ctx.fill();
   ctx.restore();
-  /* flat minimal disc: white piece -> ivory with ink ring; black piece -> ink disc */
-  var isWhite=piece.c==='w';
-  ctx.fillStyle=isWhite?'#FFFFFF':'#1E1B16';
+  var light=piece.c==='w'?'#ffffff':'#55617a';
+  var mid=piece.c==='w'?'#e9e1cd':'#2c3547';
+  var dark=piece.c==='w'?'#a89468':'#10141d';
+  var g=ctx.createRadialGradient(px-pr*0.35,py-pr*0.4,pr*0.1,px,py,pr);
+  g.addColorStop(0,light);g.addColorStop(0.55,mid);g.addColorStop(1,dark);
+  ctx.fillStyle=g;
   ctx.beginPath();ctx.arc(px,py,pr,0,6.3);ctx.fill();
   ctx.lineWidth=Math.max(2,pr*0.09);
-  ctx.strokeStyle=isWhite?'#1E1B16':'#A8822F';
+  ctx.strokeStyle=piece.c==='w'?'#7a6a4d':'#05070c';
   ctx.beginPath();ctx.arc(px,py,pr,0,6.3);ctx.stroke();
-  /* glyph */
+  ctx.strokeStyle='rgba(255,255,255,0.4)';
+  ctx.lineWidth=Math.max(1.5,pr*0.05);
+  ctx.beginPath();ctx.arc(px,py,pr*0.76,Math.PI*1.05,Math.PI*1.95);ctx.stroke();
   var glyph=GLYPHS[piece.c][piece.t];
   ctx.font=(pr*1.3)+'px serif';
   ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillStyle=isWhite?'#1E1B16':'#F7F4EE';
+  ctx.fillStyle=piece.c==='w'?'rgba(70,52,28,0.5)':'rgba(0,0,0,0.65)';
+  ctx.fillText(glyph,px,py+pr*0.12+1.5);
+  ctx.fillStyle=piece.c==='w'?'#3a2d18':'#f4e9c4';
   ctx.fillText(glyph,px,py+pr*0.12);
 }
 
@@ -686,9 +700,12 @@ onTap('btnDiff',function(){
 onTap('btnAgain',function(){newGame();});
 onTap('btnHub',function(){window.location.href='index.html';});
 onTap('btnMenuTop',function(){
-  if(phase==='play'&&confirm('Leave to the games menu?'))window.location.href='index.html';
-  else if(phase!=='play')window.location.href='index.html';
+  if(phase==='play') showPanel('pause');
+  else if(phase!=='play') window.location.href='index.html';
 });
+onTap('btnResume',function(){ showPanel(null); });
+onTap('btnPauseMenu',function(){ phase='menu'; showPanel('menu'); });
+onTap('btnPauseHub',function(){ window.location.href='index.html'; });
 
 showPanel('menu');
 resize();
