@@ -119,6 +119,7 @@ var sfx = {
 
 /* ================= state ================= */
 var state = 'menu'; // menu | options | playing | gameover
+var paused = false;
 var score = 0, lives = 3, level = 1, combo = 0;
 var ball = { x:0, y:0, vx:0, vy:0, r:8, stuck:true };
 var paddle = { x:0, w:96, h:14, y:0, targetX:null };
@@ -185,7 +186,7 @@ function launch(){
   sfx.launch();
 }
 function startGame(){
-  score = 0; lives = 3; level = 1; combo = 0; particles = [];
+  score = 0; lives = 3; level = 1; combo = 0; particles = []; paused = false;
   paddle.x = W/2; paddle.targetX = null;
   buildLevel(1);
   resetBall();
@@ -228,7 +229,7 @@ function loop(t){
   if (!lastT) lastT = t;
   var dt = Math.min((t - lastT)/1000, 0.033);
   lastT = t;
-  if (state === 'playing') update(dt);
+  if (state === 'playing' && !paused) update(dt);
   updateFx(dt);
   render();
 }
@@ -369,8 +370,14 @@ function render(){
     // HUD
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'left';
+    if (state === 'playing' && !paused){
+      ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(26, 32, 15, 0, Math.PI*2); ctx.stroke();
+      ctx.fillStyle = INK;
+      ctx.fillRect(20, 25, 4, 14); ctx.fillRect(28, 25, 4, 14);
+    }
     ctx.fillStyle = INK; ctx.font = '800 20px sans-serif';
-    ctx.fillText(String(score), 16, 34);
+    ctx.fillText(String(score), 52, 34);
     ctx.textAlign = 'center';
     ctx.fillStyle = GOLD; ctx.font = '700 13px sans-serif';
     ctx.fillText('BEST ' + best, W/2, 32);
@@ -381,7 +388,7 @@ function render(){
     var dots = '';
     for (var li = 0; li < lives; li++) dots += '●';
     ctx.fillStyle = GOLD;
-    ctx.fillText(dots, 16, 58);
+    ctx.fillText(dots, 52, 58);
     if (ball.stuck && state === 'playing'){
       ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(30,27,22,.55)';
       ctx.font = '700 15px sans-serif';
@@ -438,6 +445,17 @@ function showGameOver(){
     '<button class="btn" data-act="menu">MENU</button>'
   );
 }
+function showPause(){
+  paused = true;
+  showOverlay(
+    '<h1 style="font-size:32px">PAUSED</h1>' +
+    '<div class="rule"></div>' +
+    '<div class="sub">TAKE A BREATHER</div>' +
+    '<button class="btn solid" data-act="resume">RESUME</button>' +
+    '<button class="btn" data-act="menu">MENU</button>' +
+    '<button class="btn" data-act="home">HOME</button>'
+  );
+}
 function wireButtons(){
   var btns = overlayEl.querySelectorAll('[data-act]');
   for (var i = 0; i < btns.length; i++){
@@ -447,8 +465,10 @@ function wireButtons(){
         var a = b.getAttribute('data-act');
         if (a === 'start') startGame();
         else if (a === 'options') showOptions();
-        else if (a === 'menu') showMenu();
+        else if (a === 'menu'){ paused = false; showMenu(); }
         else if (a === 'exit') window.location.href = 'index.html';
+        else if (a === 'home') window.location.href = 'index.html';
+        else if (a === 'resume'){ paused = false; hideOverlay(); }
         else if (a === 'sound'){
           soundOn = !soundOn; store.set('sound', soundOn ? 'on' : 'off');
           showOptions(); if (soundOn) sfx.launch();
@@ -467,8 +487,16 @@ function pointerX(e){
   if (e.touches && e.touches.length) return e.touches[0].clientX;
   return e.clientX;
 }
+function pointerY(e){
+  if (e.touches && e.touches.length) return e.touches[0].clientY;
+  return e.clientY;
+}
 function onDown(e){
   audio();
+  if (state === 'playing' && !paused && pointerX(e) < 58 && pointerY(e) < 66){
+    showPause(); e.preventDefault(); return;
+  }
+  if (paused) return;
   if (state === 'playing'){
     paddle.targetX = pointerX(e);
     if (ball.stuck) launch();
@@ -476,7 +504,7 @@ function onDown(e){
   e.preventDefault();
 }
 function onMove(e){
-  if (state === 'playing' && (e.touches || e.buttons)){
+  if (state === 'playing' && !paused && (e.touches || e.buttons)){
     paddle.targetX = pointerX(e);
   }
   if (e.cancelable) e.preventDefault();
