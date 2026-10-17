@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#F7F4EE">
-<title>3D Target Shoot</title>
+<title>Zombie Hunt</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
@@ -13,7 +13,13 @@
     touch-action:none; -webkit-user-select:none; user-select:none;
     -webkit-tap-highlight-color: transparent;
   }
-  #scene { position:fixed; inset:0; }
+  #rot { position:fixed; inset:0; overflow:hidden; }
+  #rot.land {
+    left:50%; top:50%; right:auto; bottom:auto;
+    width:100vh; height:100vw;
+    transform:translate(-50%,-50%) rotate(90deg);
+  }
+  #scene { position:absolute; inset:0; }
   #scene canvas { display:block; }
   #hud {
     position:fixed; top:0; left:0; right:0; z-index:2;
@@ -57,6 +63,13 @@
     background:rgba(247,244,238,.85); border:1.5px solid #1E1B16;
   }
   #pauseBtn:active { transform:scale(.92); }
+  #rotBtn {
+    position:fixed; top:14px; right:14px; z-index:4;
+    width:44px; height:44px; border-radius:50%;
+    font-size:19px; color:#1E1B16; cursor:pointer; font-family:inherit;
+    background:rgba(247,244,238,.85); border:1.5px solid #1E1B16;
+  }
+  #rotBtn:active { transform:scale(.92); }
   #pauseBtn.hidden, .hidden { display:none !important; }
   #fireBtn {
     position:fixed; right:26px; bottom:34px; z-index:4;
@@ -120,6 +133,7 @@
 </style>
 </head>
 <body>
+<div id="rot">
 <div id="scene"></div>
 <div id="hud">
   <div class="col" style="min-width:44px"></div>
@@ -139,10 +153,12 @@
 <div id="dmgflash"></div>
 <div id="crosshair" class="hidden"><div class="dot"></div></div>
 <button id="pauseBtn" class="hidden">&#10074;&#10074;</button>
+<button id="rotBtn" class="hidden" title="Rotate 9:16 / 16:9">&#10227;</button>
 <button id="fireBtn" class="hidden">FIRE</button>
 <div id="joyBase"></div>
 <div id="joyNub"></div>
 <div id="overlay"></div>
+</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (function(){
@@ -174,11 +190,35 @@ var comboTag = document.getElementById('comboTag');
 var hpfill = document.getElementById('hpfill');
 var dmgflash = document.getElementById('dmgflash');
 var pauseBtn = document.getElementById('pauseBtn');
+var rotBtn = document.getElementById('rotBtn');
+var rotEl = document.getElementById('rot');
 var fireBtn = document.getElementById('fireBtn');
 var crosshair = document.getElementById('crosshair');
 var joyBase = document.getElementById('joyBase');
 var joyNub = document.getElementById('joyNub');
 var W = window.innerWidth, H = window.innerHeight;
+var VW = W, VH = H;   // layout size inside #rot (swapped when CSS-rotated)
+var rotated = false;  // true while #rot is turned 90deg for 16:9 on a portrait screen
+var orient = store.get('orient', W > H ? 'land' : 'port'); // 'port' = 9:16, 'land' = 16:9
+if (orient !== 'land' && orient !== 'port') orient = 'port';
+function orientLabel(){ return orient === 'land' ? '16:9 LANDSCAPE' : '9:16 PORTRAIT'; }
+function applyOrient(){
+  rotated = (orient === 'land' && window.innerHeight > window.innerWidth);
+  rotEl.classList.toggle('land', rotated);
+  onResize();
+  var ob = document.getElementById('oOrient');
+  if (ob) ob.textContent = orientLabel();
+}
+function toggleOrient(){
+  orient = (orient === 'land') ? 'port' : 'land';
+  store.set('orient', orient);
+  applyOrient();
+}
+// map a screen touch/mouse point into #rot game coordinates
+function mapPt(cx, cy){
+  if (rotated) return { x: cy, y: W - cx };
+  return { x: cx, y: cy };
+}
 
 /* ================= audio ================= */
 var AC = null, master = null;
@@ -246,125 +286,247 @@ function box(w,h,d,m,x,y,z){
   o.position.set(x,y,z); o.castShadow = true;
   return o;
 }
+/* smooth body helpers — no boxes for characters */
+function sph(r, m, x, y, z, ws, hs){
+  var o = new THREE.Mesh(new THREE.SphereGeometry(r, ws || 14, hs || 12), m);
+  o.position.set(x || 0, y || 0, z || 0); o.castShadow = true;
+  return o;
+}
+function cyl(rt, rb, h, m, x, y, z, seg){
+  var o = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg || 14), m);
+  o.position.set(x || 0, y || 0, z || 0); o.castShadow = true;
+  return o;
+}
+function capsuleLimb(r, len, m){          // vertical limb, pivot at the top joint
+  var g = new THREE.Group();
+  g.add(cyl(r, r * 0.82, len, m, 0, -len / 2, 0));
+  g.add(sph(r, m, 0, 0, 0));
+  g.add(sph(r * 0.82, m, 0, -len, 0));
+  return g;
+}
+function wrapRing(r, tube, m){            // horizontal ring; set position after
+  var o = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 8, 22), m);
+  o.rotation.x = Math.PI / 2; o.castShadow = true;
+  return o;
+}
+function blobShadow(r){
+  var o = new THREE.Mesh(new THREE.CircleGeometry(r, 20),
+    new THREE.MeshBasicMaterial({ color:0x1E1B16, transparent:true, opacity:0.22, depthWrite:false }));
+  o.rotation.x = -Math.PI / 2; o.position.y = 0.02;
+  return o;
+}
 
 /* ================= hero models ================= */
 function makeGun(accentMat){
   var g = new THREE.Group();
-  var ink = mat(0x2A251D, 0.45, 0.35);
-  g.add(box(0.09, 0.11, 0.42, ink, 0, 0, 0));
-  var barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.3, 12), ink);
-  barrel.rotation.x = Math.PI/2; barrel.position.set(0, 0.02, -0.34); barrel.castShadow = true;
-  g.add(barrel);
-  g.add(box(0.08, 0.2, 0.1, ink, 0, -0.14, 0.1));
-  var ring = new THREE.Mesh(new THREE.TorusGeometry(0.034, 0.008, 8, 20), accentMat);
-  ring.position.set(0, 0.02, -0.47);
-  g.add(ring);
+  var ink = mat(0x2A251D, 0.4, 0.4);
+  g.add(box(0.09, 0.12, 0.4, ink, 0, 0, 0));
+  var barrel = cyl(0.026, 0.026, 0.3, ink, 0, 0.025, -0.32, 12);
+  barrel.rotation.x = Math.PI/2; g.add(barrel);
+  var grip = box(0.075, 0.2, 0.09, ink, 0, -0.14, 0.09); grip.rotation.x = 0.25; g.add(grip);
+  var mgzn = box(0.07, 0.14, 0.08, ink, 0, -0.1, -0.05); mgzn.rotation.x = -0.2; g.add(mgzn);
+  g.add(sph(0.02, accentMat, 0, 0.085, -0.1, 8, 8));
+  var ringM = new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.008, 8, 20), accentMat);
+  ringM.position.set(0, 0.025, -0.46); g.add(ringM);
   return g;
 }
 function buildHero(id){
   var g = new THREE.Group();
   var P = {};
-  var legL, legR, armL, armR, head;
-  function limbs(legM, torsoM, armM, headM){
-    var hl = new THREE.Group(); hl.position.set(-0.11, 0.5, 0);
-    var legL = box(0.16, 0.5, 0.18, legM, 0, -0.25, 0); hl.add(legL);
-    var hr = new THREE.Group(); hr.position.set(0.11, 0.5, 0);
-    var legR = box(0.16, 0.5, 0.18, legM, 0, -0.25, 0); hr.add(legR);
-    var torso = box(0.42, 0.55, 0.24, torsoM, 0, 0.78, 0);
-    var al = new THREE.Group(); al.position.set(-0.28, 1.02, 0);
-    var aL = box(0.13, 0.5, 0.15, armM, 0, -0.22, 0); al.add(aL);
-    var ar = new THREE.Group(); ar.position.set(0.28, 1.02, 0);
-    var aR = box(0.13, 0.5, 0.15, armM, 0, -0.22, 0); ar.add(aR);
-    head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 18, 14), headM);
-    head.position.set(0, 1.32, 0); head.castShadow = true;
-    g.add(hl); g.add(hr); g.add(torso); g.add(al); g.add(ar); g.add(head);
-    P = { legL:hl, legR:hr, armL:al, armR:ar, head:head, torso:torso };
-  }
-  var gun, flashMesh, flashLight, gunTip;
+  var M = {};
   if (id === 'joker'){
-    var dark = mat(0x191920, 0.55, 0.1), pink = mat(0xFF4FD8, 0.4, 0, 0xFF4FD8, 1.4),
-        purp = mat(0x8A4FFF, 0.4, 0, 0x8A4FFF, 1.2), white = mat(0xF2EFE8, 0.5, 0);
-    limbs(dark, dark, dark, dark);
-    g.add(box(0.5, 0.62, 0.3, dark, 0, 0.72, 0));            // coat
-    g.add(box(0.03, 0.4, 0.02, pink, -0.12, 0.8, -0.16));    // glow strips
-    g.add(box(0.03, 0.4, 0.02, purp, 0.12, 0.8, -0.16));
-    var hood = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 10, 0, 6.29, 0, 2.2), dark);
-    hood.position.set(0, 1.34, 0.05); g.add(hood);
-    g.add(box(0.17, 0.13, 0.03, white, 0, 1.32, -0.13));     // mask
-    g.add(box(0.035, 0.02, 0.012, purp, -0.045, 1.34, -0.15));
-    g.add(box(0.035, 0.02, 0.012, purp, 0.045, 1.34, -0.15));
-    gun = makeGun(pink);
+    M.suit = mat(0x232031, 0.55, 0.1);
+    M.skin = mat(0xF3EFE4, 0.5, 0);
+    M.hand = M.skin; M.shoe = mat(0x17161D, 0.5, 0.1);
+    M.trim = mat(0xFF4FD8, 0.4, 0, 0xFF4FD8, 1.5);
+    M.trim2 = mat(0x8A4FFF, 0.4, 0, 0x8A4FFF, 1.3);
+    M.gunAccent = M.trim;
   } else if (id === 'shadow'){
-    var blk = mat(0x101013, 0.5, 0.2), gry = mat(0x3A3A40, 0.5, 0.3);
-    limbs(blk, blk, blk, blk);
-    g.add(box(0.2, 0.05, 0.02, gry, 0, 1.34, -0.12));        // visor
-    g.add(box(0.3, 0.1, 0.26, blk, 0, 0.62, 0));             // belt
-    gun = makeGun(gry);
+    M.suit = mat(0x141519, 0.5, 0.25);
+    M.skin = mat(0x141519, 0.5, 0.25);
+    M.hand = M.skin; M.shoe = mat(0x0E0F12, 0.5, 0.2);
+    M.trim = mat(0x59F2FF, 0.35, 0, 0x59F2FF, 1.6);
+    M.armor = mat(0x2B2C34, 0.45, 0.4);
+    M.gunAccent = mat(0x8A8F9A, 0.4, 0.5);
   } else if (id === 'pharaoh'){
-    var wht = mat(0xF5F2EA, 0.45, 0.15), gld = mat(0xC9A227, 0.3, 0.65),
-        blu = mat(0x3A6FD8, 0.3, 0, 0x3A6FD8, 1.3);
-    limbs(wht, wht, wht, wht);
-    g.add(box(0.46, 0.4, 0.28, gld, 0, 0.86, 0));           // chest plate
-    var sh1 = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), gld);
-    sh1.scale.set(1, 0.6, 1); sh1.position.set(-0.3, 1.08, 0); g.add(sh1);
-    var sh2 = sh1.clone(); sh2.position.x = 0.3; g.add(sh2);
-    var gem = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), blu);
-    gem.position.set(0, 0.9, -0.15); g.add(gem);
-    var crown = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.22, 8), gld);
-    crown.position.set(0, 1.5, 0); g.add(crown);
-    gun = makeGun(gld);
-  } else { // agent — white suit
-    var wsu = mat(0xF2F0EA, 0.55, 0.05), blk2 = mat(0x111114, 0.5, 0.1),
-        skn = mat(0xE8C39E, 0.6, 0);
-    limbs(wsu, wsu, wsu, skn);
-    g.add(box(0.07, 0.3, 0.02, blk2, 0, 0.86, -0.13));       // tie
-    g.add(box(0.14, 0.12, 0.16, blk2, -0.28, 0.72, 0));      // gloves
-    g.add(box(0.14, 0.12, 0.16, blk2, 0.28, 0.72, 0));
-    gun = makeGun(mat(0xC9A227, 0.3, 0.6));
+    M.suit = mat(0xF1ECDD, 0.55, 0.05);
+    M.skin = mat(0xD9A86C, 0.6, 0);
+    M.hand = M.skin; M.shoe = mat(0xC9A227, 0.35, 0.6);
+    M.gold = mat(0xC9A227, 0.28, 0.75);
+    M.gem = mat(0x3A6FD8, 0.3, 0, 0x3A6FD8, 1.5);
+    M.gunAccent = M.gold;
+  } else { // agent
+    M.suit = mat(0xEFEDE6, 0.55, 0.05);
+    M.skin = mat(0xE6BD96, 0.6, 0);
+    M.dark = mat(0x141416, 0.5, 0.1);
+    M.hand = M.dark; M.shoe = M.dark;
+    M.gunAccent = mat(0xC9A227, 0.3, 0.6);
   }
-  gun.position.set(0.3, 0.86, -0.3);
-  g.add(gun);
-  gunTip = new THREE.Group(); gunTip.position.set(0, 0.02, -0.52); gun.add(gunTip);
-  flashMesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.24, 0.24),
+
+  /* ---- articulated smooth rig ---- */
+  function leg(x){
+    var hip = new THREE.Group(); hip.position.set(x, 0.98, 0); g.add(hip);
+    hip.add(capsuleLimb(0.088, 0.36, M.suit));
+    var knee = new THREE.Group(); knee.position.set(0, -0.38, 0); hip.add(knee);
+    knee.add(capsuleLimb(0.064, 0.34, M.suit));
+    var foot = sph(0.085, M.shoe, 0, -0.70, -0.06); foot.scale.set(1, 0.6, 1.75); knee.add(foot);
+    return hip;
+  }
+  P.legL = leg(-0.11); P.legR = leg(0.11);
+  var torsoG = new THREE.Group(); torsoG.position.set(0, 0.98, 0); g.add(torsoG);
+  P.torso = cyl(0.205, 0.148, 0.56, M.suit, 0, 0.28, 0, 18); torsoG.add(P.torso);
+  var shBar = cyl(0.07, 0.07, 0.52, M.suit, 0, 0.5, 0, 10);
+  shBar.rotation.z = Math.PI/2; torsoG.add(shBar);
+  torsoG.add(sph(0.07, M.suit, -0.26, 0.5, 0, 10, 8));
+  torsoG.add(sph(0.07, M.suit, 0.26, 0.5, 0, 10, 8));
+  function arm(x){
+    var sh = new THREE.Group(); sh.position.set(x, 1.48, 0); g.add(sh);
+    sh.add(capsuleLimb(0.062, 0.28, M.suit));
+    var el = new THREE.Group(); el.position.set(0, -0.30, 0); sh.add(el);
+    el.add(capsuleLimb(0.052, 0.26, M.suit));
+    el.add(sph(0.068, M.hand, 0, -0.30, 0, 10, 8));
+    return { sh: sh, el: el };
+  }
+  var aL = arm(-0.28), aR = arm(0.28);
+  P.armL = aL.sh; P.armR = aR.sh;
+  torsoG.add(cyl(0.055, 0.062, 0.1, M.skin, 0, 0.60, 0, 10));
+  P.head = sph(0.155, M.skin, 0, 0.74, 0, 18, 14); torsoG.add(P.head);
+
+  /* ---- hero costumes ---- */
+  if (id === 'joker'){
+    torsoG.add(cyl(0.225, 0.27, 0.5, M.suit, 0, 0.26, 0, 18));      // coat torso
+    torsoG.add(cyl(0.27, 0.44, 0.66, M.suit, 0, -0.28, 0.02, 18));  // coat skirt
+    var hem = wrapRing(0.435, 0.016, M.trim); hem.position.set(0, -0.60, 0.02); torsoG.add(hem);
+    var collar = wrapRing(0.17, 0.05, M.suit); collar.position.set(0, 0.58, 0); collar.rotation.x = 1.1; torsoG.add(collar);
+    torsoG.add(box(0.025, 0.5, 0.02, M.trim, -0.1, 0.2, -0.24));
+    torsoG.add(box(0.025, 0.5, 0.02, M.trim2, 0.1, 0.2, -0.24));
+    torsoG.add(sph(0.024, M.trim2, -0.058, 0.76, -0.128, 8, 8));    // mask eyes
+    torsoG.add(sph(0.024, M.trim2, 0.058, 0.76, -0.128, 8, 8));
+    var grin = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.009, 8, 14, Math.PI), M.trim2);
+    grin.position.set(0, 0.70, -0.135); grin.rotation.z = Math.PI; torsoG.add(grin);
+    var hair = new THREE.Mesh(new THREE.SphereGeometry(0.168, 14, 10, 0, Math.PI*2, 0, 1.85), mat(0x101018, 0.6, 0));
+    hair.position.set(0, 0.755, 0.018); torsoG.add(hair);
+    var cuffL = wrapRing(0.062, 0.012, M.trim); cuffL.position.set(0, -0.22, 0); aL.el.add(cuffL);
+    var cuffR = wrapRing(0.062, 0.012, M.trim); cuffR.position.set(0, -0.22, 0); aR.el.add(cuffR);
+  } else if (id === 'shadow'){
+    torsoG.add(cyl(0.215, 0.16, 0.42, M.armor, 0, 0.30, 0, 18));    // chest armor
+    torsoG.add(box(0.21, 0.05, 0.03, M.trim, 0, 0.76, -0.135));     // visor
+    var belt = wrapRing(0.165, 0.032, M.armor); belt.position.set(0, 0.02, 0); torsoG.add(belt);
+    var seamL = wrapRing(0.09, 0.008, M.armor); seamL.position.set(0, -0.12, 0); P.legL.add(seamL);
+    var seamR = wrapRing(0.09, 0.008, M.armor); seamR.position.set(0, -0.12, 0); P.legR.add(seamR);
+    var padL = sph(0.075, M.armor, 0, -0.36, -0.05, 10, 8); padL.scale.set(1, 1, 0.7); P.legL.add(padL);
+    var padR = sph(0.075, M.armor, 0, -0.36, -0.05, 10, 8); padR.scale.set(1, 1, 0.7); P.legR.add(padR);
+  } else if (id === 'pharaoh'){
+    torsoG.add(cyl(0.225, 0.175, 0.44, M.gold, 0, 0.30, 0, 18));     // chest plate
+    torsoG.add(cyl(0.20, 0.34, 0.44, M.suit, 0, -0.20, 0, 18));      // kilt
+    var pbelt = wrapRing(0.20, 0.028, M.gold); pbelt.position.set(0, 0.0, 0); torsoG.add(pbelt);
+    var discL = sph(0.11, M.gold, -0.28, 0.58, 0, 12, 10); discL.scale.set(1, 0.45, 1); torsoG.add(discL);
+    var discR = sph(0.11, M.gold, 0.28, 0.58, 0, 12, 10); discR.scale.set(1, 0.45, 1); torsoG.add(discR);
+    torsoG.add(sph(0.034, M.gem, 0, 0.40, -0.20, 10, 8));            // chest gem
+    var band = wrapRing(0.15, 0.02, M.gold); band.position.set(0, 0.80, 0); band.rotation.x = 1.35; torsoG.add(band);
+    torsoG.add(sph(0.028, M.gem, 0, 0.86, -0.125, 8, 8));            // headband gem
+    var crown = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.2, 10), M.gold);
+    crown.position.set(0, 0.95, 0); crown.castShadow = true; torsoG.add(crown);
+    var abL = wrapRing(0.066, 0.014, M.gold); abL.position.set(0, -0.12, 0); aL.el.add(abL);
+    var abR = wrapRing(0.066, 0.014, M.gold); abR.position.set(0, -0.12, 0); aR.el.add(abR);
+  } else { // agent
+    torsoG.add(box(0.062, 0.36, 0.016, M.dark, 0, 0.30, -0.20));     // tie
+    torsoG.add(box(0.075, 0.08, 0.02, M.dark, 0, 0.50, -0.195));     // knot
+    torsoG.add(box(0.21, 0.055, 0.03, M.dark, 0, 0.77, -0.132));     // sunglasses
+  }
+
+  /* ---- gun in right hand ---- */
+  var gun = makeGun(M.gunAccent);
+  var handAnchor = new THREE.Group(); handAnchor.position.set(0, -0.32, 0); aR.el.add(handAnchor);
+  gun.position.set(0, -0.03, -0.30); handAnchor.add(gun);
+  P.gun = gun;
+  var gunTip = new THREE.Group(); gunTip.position.set(0, 0, -0.55); gun.add(gunTip);
+  P.gunTip = gunTip;
+  var flashMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.26, 0.26),
     new THREE.MeshBasicMaterial({ color:0xFFD97A, transparent:true, opacity:0.95, depthWrite:false })
   );
   flashMesh.position.copy(gunTip.position); flashMesh.visible = false;
   gun.add(flashMesh);
-  flashLight = new THREE.PointLight(0xFFD27A, 0, 8);
-  flashLight.position.set(0.3, 1.0, -1.2);
+  P.flashMesh = flashMesh;
+  var flashLight = new THREE.PointLight(0xFFD27A, 0, 9);
+  flashLight.position.set(0.25, 1.35, -1.0);
   g.add(flashLight);
-  P.gunTip = gunTip; P.flashMesh = flashMesh; P.flashLight = flashLight; P.gun = gun;
+  P.flashLight = flashLight;
+  aR.el.rotation.x = -0.35;
+  g.add(blobShadow(0.5));
   scene.add(g);
   return { group:g, parts:P };
 }
-
 /* ================= mummy enemy ================= */
 function buildMummy(){
   var g = new THREE.Group();
-  var yel = mat(0xD9A41B, 0.75, 0), pal = mat(0xEDE6D2, 0.8, 0),
-      amb = mat(0xFF9A1F, 0.4, 0, 0xFF9A1F, 1.6);
-  function limb(w,h,d,m,x,y){
-    var pivot = new THREE.Group(); pivot.position.set(x, y, 0);
-    var b = box(w, h, d, m, 0, -h/2, 0); pivot.add(b); g.add(pivot);
-    return pivot;
+  var tint = 0.9 + Math.random() * 0.2;
+  function tc(hex){ return new THREE.Color(hex).multiplyScalar(tint).getHex(); }
+  var flesh = mat(tc(0xD9A92E), 0.85, 0);
+  var wrapM = mat(tc(0xEFE3C2), 0.9, 0);
+  var darkM = mat(0x5C4A26, 0.9, 0);
+  var eyeM = mat(0xFF9A1F, 0.4, 0, 0xFF9A1F, 1.8);
+
+  function mleg(x){
+    var hip = new THREE.Group(); hip.position.set(x, 0.95, 0); g.add(hip);
+    hip.add(capsuleLimb(0.085, 0.34, flesh));
+    var wr1 = wrapRing(0.088, 0.024, wrapM); wr1.position.set(0, -0.10, 0); hip.add(wr1);
+    var wr2 = wrapRing(0.086, 0.024, wrapM); wr2.position.set(0, -0.24, 0); hip.add(wr2);
+    var knee = new THREE.Group(); knee.position.set(0, -0.36, 0); hip.add(knee);
+    knee.add(capsuleLimb(0.062, 0.32, flesh));
+    var wr3 = wrapRing(0.066, 0.022, wrapM); wr3.position.set(0, -0.10, 0); knee.add(wr3);
+    var wr4 = wrapRing(0.064, 0.022, wrapM); wr4.position.set(0, -0.24, 0); knee.add(wr4);
+    var foot = sph(0.08, flesh, 0, -0.66, -0.05, 10, 8); foot.scale.set(1, 0.6, 1.7); knee.add(foot);
+    return hip;
   }
-  var legL = limb(0.17, 0.5, 0.19, yel, -0.11, 0.5);
-  var legR = limb(0.17, 0.5, 0.19, yel, 0.11, 0.5);
-  var torso = box(0.44, 0.56, 0.26, yel, 0, 0.78, 0); g.add(torso);
-  g.add(box(0.46, 0.09, 0.28, pal, 0, 0.92, 0));
-  g.add(box(0.46, 0.09, 0.28, pal, 0, 0.68, 0));
-  var armL = limb(0.14, 0.52, 0.16, yel, -0.3, 1.02);
-  var armR = limb(0.14, 0.52, 0.16, yel, 0.3, 1.02);
-  armL.rotation.x = -0.85; armR.rotation.x = -0.85;   // zombie reach
-  var head = box(0.24, 0.26, 0.24, yel, 0, 1.32, 0); g.add(head);
-  g.add(box(0.26, 0.08, 0.26, pal, 0, 1.4, 0));
-  var eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), amb);
-  eyeL.position.set(-0.06, 1.33, -0.12); g.add(eyeL);
-  var eyeR = eyeL.clone(); eyeR.position.x = 0.06; g.add(eyeR);
+  var legL = mleg(-0.11), legR = mleg(0.11);
+
+  var torsoG = new THREE.Group(); torsoG.position.set(0, 0.95, 0); torsoG.rotation.x = 0.26; g.add(torsoG);
+  torsoG.add(cyl(0.20, 0.148, 0.56, flesh, 0, 0.28, 0, 16));
+  var wb1 = wrapRing(0.165, 0.028, wrapM); wb1.position.set(0, 0.10, 0); torsoG.add(wb1);
+  var wb2 = wrapRing(0.178, 0.028, wrapM); wb2.position.set(0, 0.28, 0); torsoG.add(wb2);
+  var wb3 = wrapRing(0.19, 0.028, wrapM); wb3.position.set(0, 0.46, 0); torsoG.add(wb3);
+  for (var sN = 0; sN < 5; sN++){   // tattered hanging strips
+    var strip = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.22 + Math.random()*0.12),
+      new THREE.MeshStandardMaterial({ color: wrapM.color, roughness: 0.95, side: THREE.DoubleSide }));
+    var sa = (sN / 5) * Math.PI * 2;
+    strip.position.set(Math.cos(sa)*0.19, 0.30 + Math.random()*0.15, Math.sin(sa)*0.19);
+    strip.rotation.set(0.26 + Math.random()*0.5 - 0.25, sa, Math.random()*0.5 - 0.25);
+    torsoG.add(strip);
+  }
+
+  function marm(x){
+    var sh = new THREE.Group(); sh.position.set(x, 0.50, -0.02); torsoG.add(sh);
+    sh.add(capsuleLimb(0.06, 0.28, flesh));
+    var ar1 = wrapRing(0.064, 0.022, wrapM); ar1.position.set(0, -0.12, 0); sh.add(ar1);
+    var el = new THREE.Group(); el.position.set(0, -0.30, 0); sh.add(el);
+    el.add(capsuleLimb(0.05, 0.26, flesh));
+    var ar2 = wrapRing(0.054, 0.02, wrapM); ar2.position.set(0, -0.12, 0); el.add(ar2);
+    el.add(sph(0.058, flesh, 0, -0.30, 0, 10, 8));
+    for (var fI = 0; fI < 3; fI++){   // claw fingers
+      var finger = cyl(0.013, 0.008, 0.09, darkM, (fI-1)*0.035, -0.36, -0.03, 6);
+      finger.rotation.x = -0.5; el.add(finger);
+    }
+    sh.rotation.x = -0.95;            // zombie reach
+    return sh;
+  }
+  var armL = marm(-0.27), armR = marm(0.27);
+
+  var headG = new THREE.Group(); headG.position.set(0, 0.66, -0.05); torsoG.add(headG);
+  headG.add(sph(0.15, flesh, 0, 0, 0, 16, 12));
+  var band = wrapRing(0.152, 0.032, wrapM); band.position.set(0, 0.03, 0); band.rotation.z = 0.35; headG.add(band);
+  var face = sph(0.125, darkM, 0, -0.015, -0.055, 12, 10); face.scale.set(0.82, 0.92, 0.62); headG.add(face);
+  headG.add(sph(0.032, eyeM, -0.055, 0.035, -0.148, 8, 8));
+  headG.add(sph(0.032, eyeM, 0.055, 0.035, -0.148, 8, 8));
+  var hstrip = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.2),
+    new THREE.MeshStandardMaterial({ color: wrapM.color, roughness: 0.95, side: THREE.DoubleSide }));
+  hstrip.position.set(0.1, -0.12, 0.06); hstrip.rotation.set(0.4, 0, 0.5); headG.add(hstrip);
+
+  g.add(blobShadow(0.5));
   scene.add(g);
   return { group:g, legL:legL, legR:legR, armL:armL, armR:armR,
-           flashMats:[torso.material, head.material],
+           flashMats:[flesh, wrapM],
            x:0, z:0, hp:2, speed:1.4, walkPhase:Math.random()*6,
            atkCd:0, dying:false, dieT:0, hitFlash:0 };
 }
@@ -395,15 +557,17 @@ function enemyMeshes(){
 
 /* ================= three setup ================= */
 function initThree(){
+  VW = rotEl.clientWidth || window.innerWidth;
+  VH = rotEl.clientHeight || window.innerHeight;
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xF7F4EE);
   scene.fog = new THREE.Fog(0xF7F4EE, 12, 30);
-  camera = new THREE.PerspectiveCamera(62, W/H, 0.1, 80);
+  camera = new THREE.PerspectiveCamera(62, VW/VH, 0.1, 80);
   camera.rotation.order = 'YXZ';
   scene.add(camera);
   renderer = new THREE.WebGLRenderer({ antialias:true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.setSize(W, H);
+  renderer.setSize(VW, VH);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   if (THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
@@ -449,10 +613,11 @@ function initThree(){
 }
 function onResize(){
   W = window.innerWidth; H = window.innerHeight;
+  VW = rotEl.clientWidth || W; VH = rotEl.clientHeight || H;
   if (!renderer) return;
-  camera.aspect = W/H;
+  camera.aspect = VW/VH;
   camera.updateProjectionMatrix();
-  renderer.setSize(W, H);
+  renderer.setSize(VW, VH);
 }
 
 /* ================= effects ================= */
@@ -475,7 +640,7 @@ function popup(text, gold){
   var d = document.createElement('div');
   d.className = 'scorepop' + (gold ? ' gold' : '');
   d.textContent = text;
-  d.style.left = (W/2 - 24) + 'px'; d.style.top = (H/2 - 70) + 'px';
+  d.style.left = (VW/2 - 24) + 'px'; d.style.top = (VH/2 - 70) + 'px';
   document.body.appendChild(d);
   setTimeout(function(){ if (d.parentNode) d.parentNode.removeChild(d); }, 850);
 }
@@ -632,7 +797,7 @@ function update(dt){
     e.group.rotation.y = Math.atan2(-dx, -dz);
     e.group.position.set(e.x, 0, e.z);
     // attack arms recover
-    if (e.atkCd < 0.8){ e.armL.rotation.x += (-0.85 - e.armL.rotation.x)*dt*6; e.armR.rotation.x += (-0.85 - e.armR.rotation.x)*dt*6; }
+    if (e.atkCd < 0.8){ e.armL.rotation.x += (-0.95 - e.armL.rotation.x)*dt*6; e.armR.rotation.x += (-0.95 - e.armR.rotation.x)*dt*6; }
   }
   // particles
   for (i=particles.length-1;i>=0;i--){
@@ -690,6 +855,7 @@ function startGame(){
   hero = buildHero(HEROS[heroIdx].id);
   overlayEl.classList.add('hidden');
   pauseBtn.classList.remove('hidden');
+  rotBtn.classList.remove('hidden');
   fireBtn.classList.remove('hidden');
   crosshair.classList.remove('hidden');
   for (var s=0;s<3;s++) spawnEnemy();
@@ -702,6 +868,7 @@ function gameOver(reason){
   var isBest = score > best;
   if (isBest){ best = score; store.set('best', String(best)); }
   pauseBtn.classList.add('hidden');
+  rotBtn.classList.add('hidden');
   fireBtn.classList.add('hidden');
   crosshair.classList.add('hidden');
   overlayEl.classList.remove('hidden');
@@ -726,6 +893,7 @@ function showMenu(){
   state = 'menu';
   paused = false;
   pauseBtn.classList.add('hidden');
+  rotBtn.classList.add('hidden');
   fireBtn.classList.add('hidden');
   crosshair.classList.add('hidden');
   overlayEl.classList.remove('hidden');
@@ -751,6 +919,8 @@ function showOptions(){
       '<button class="val" id="oSound">'+(soundOn ? 'ON' : 'OFF')+'</button></div>' +
     '<div class="opt-row"><span class="label">HERO</span>' +
       '<button class="val" id="oHero">'+HEROS[heroIdx].icon+' '+HEROS[heroIdx].name+'</button></div>' +
+    '<div class="opt-row"><span class="label">ROTATE</span>' +
+      '<button class="val" id="oOrient">'+orientLabel()+'</button></div>' +
     '<br><button class="btn solid" id="bBack">BACK</button>';
   wireButton('oSound', function(){
     soundOn = !soundOn;
@@ -762,6 +932,7 @@ function showOptions(){
     store.set('hero', String(heroIdx));
     document.getElementById('oHero').textContent = HEROS[heroIdx].icon+' '+HEROS[heroIdx].name;
   });
+  wireButton('oOrient', function(){ toggleOrient(); });
   wireButton('bBack', function(){ showMenu(); });
 }
 function doPause(){
@@ -783,37 +954,40 @@ function doPause(){
 
 /* ================= input ================= */
 pauseBtn.addEventListener('click', function(){ sfx.click(); doPause(); });
+rotBtn.addEventListener('click', function(){ sfx.click(); toggleOrient(); });
 fireBtn.addEventListener('pointerdown', function(e){ e.preventDefault(); fire(); });
 document.addEventListener('touchstart', function(e){
   if (state !== 'playing' || paused) return;
   for (var i=0;i<e.changedTouches.length;i++){
     var t = e.changedTouches[i];
-    if (t.target === fireBtn || t.target === pauseBtn) continue;
-    if (t.clientX < W*0.45 && joy.id === null){
-      joy.id = t.identifier; joy.ox = t.clientX; joy.oy = t.clientY;
+    if (t.target === fireBtn || t.target === pauseBtn || t.target === rotBtn) continue;
+    var p = mapPt(t.clientX, t.clientY);
+    if (p.x < VW*0.45 && joy.id === null){
+      joy.id = t.identifier; joy.ox = p.x; joy.oy = p.y;
       joy.dx = 0; joy.dy = 0;
       joyBase.style.display = 'block'; joyNub.style.display = 'block';
-      joyBase.style.left = t.clientX+'px'; joyBase.style.top = t.clientY+'px';
-      joyNub.style.left = t.clientX+'px'; joyNub.style.top = t.clientY+'px';
+      joyBase.style.left = p.x+'px'; joyBase.style.top = p.y+'px';
+      joyNub.style.left = p.x+'px'; joyNub.style.top = p.y+'px';
     } else if (look.id === null){
-      look.id = t.identifier; look.lx = t.clientX; look.ly = t.clientY;
+      look.id = t.identifier; look.lx = p.x; look.ly = p.y;
     }
   }
 }, { passive:false });
 document.addEventListener('touchmove', function(e){
   for (var i=0;i<e.changedTouches.length;i++){
     var t = e.changedTouches[i];
+    var mp = mapPt(t.clientX, t.clientY);
     if (t.identifier === joy.id){
-      joy.dx = t.clientX - joy.ox; joy.dy = t.clientY - joy.oy;
+      joy.dx = mp.x - joy.ox; joy.dy = mp.y - joy.oy;
       var l = Math.hypot(joy.dx, joy.dy);
       if (l > 48){ joy.dx = joy.dx/l*48; joy.dy = joy.dy/l*48; }
       joyNub.style.left = (joy.ox + joy.dx)+'px';
       joyNub.style.top = (joy.oy + joy.dy)+'px';
     } else if (t.identifier === look.id){
-      yaw -= (t.clientX - look.lx)*0.0052;
-      pitch -= (t.clientY - look.ly)*0.0042;
+      yaw -= (mp.x - look.lx)*0.0052;
+      pitch -= (mp.y - look.ly)*0.0042;
       pitch = Math.max(-0.55, Math.min(0.5, pitch));
-      look.lx = t.clientX; look.ly = t.clientY;
+      look.lx = mp.x; look.ly = mp.y;
     }
   }
   if (state === 'playing' && !paused) e.preventDefault();
@@ -840,14 +1014,16 @@ document.addEventListener('keyup', function(e){ keys[e.code] = false; });
 var mouseDown = false, mLX = 0, mLY = 0;
 document.addEventListener('mousedown', function(e){
   if (state !== 'playing' || paused) return;
-  mouseDown = true; mLX = e.clientX; mLY = e.clientY;
+  var pm = mapPt(e.clientX, e.clientY);
+  mouseDown = true; mLX = pm.x; mLY = pm.y;
 });
 document.addEventListener('mousemove', function(e){
   if (!mouseDown || state !== 'playing' || paused) return;
-  yaw -= (e.clientX - mLX)*0.004;
-  pitch -= (e.clientY - mLY)*0.0032;
+  var qm = mapPt(e.clientX, e.clientY);
+  yaw -= (qm.x - mLX)*0.004;
+  pitch -= (qm.y - mLY)*0.0032;
   pitch = Math.max(-0.55, Math.min(0.5, pitch));
-  mLX = e.clientX; mLY = e.clientY;
+  mLX = qm.x; mLY = qm.y;
 });
 document.addEventListener('mouseup', function(){ mouseDown = false; });
 // WASD movement
@@ -865,6 +1041,7 @@ setInterval(function(){
 /* ================= boot ================= */
 if (threeOK) initThree();
 if (threeOK) hero = buildHero(HEROS[heroIdx].id);
+applyOrient();
 showMenu();
 requestAnimationFrame(loop);
 })();
