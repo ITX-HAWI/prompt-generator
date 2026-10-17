@@ -132,7 +132,7 @@ var INK_SOFT = 'rgba(30,27,22,.55)';
 var GOLD = '#A8822F';
 var PAPER = '#F7F4EE';
 var EMPTY_CELL = '#E7DFCE';
-var PIECE_TONES = ['#2A251D', '#38312A', '#453D2E', '#544A38'];
+var PIECE_COLORS = ['#C96F4A','#D9A441','#8A9B6E','#6FA3A0','#7C8DB0','#B57E97','#A08BC7','#C98F5F'];
 
 /* ================= audio ================= */
 var AC = null, master = null;
@@ -173,18 +173,18 @@ var sfx = {
   over:   function(){ tone(280, 0.5, 'sawtooth', 0.35, 70); }
 };
 
-/* ================= shapes (29 types) ================= */
+/* ================= shapes (25 classic types) ================= */
 var SHAPES = [
   { s:["#"], w:3 },                                   // single
   { s:["##"], w:3 }, { s:["#","#"], w:3 },             // domino
   { s:["###"], w:3 }, { s:["#","#","#"], w:3 },        // tri line
   { s:["####"], w:2 }, { s:["#","#","#","#"], w:2 },   // 4-line
-  { s:["#####"], w:1 }, { s:["#","#","#","#","#"], w:1 }, // 5-line
+  { s:["#####"], w:2 }, { s:["#","#","#","#","#"], w:2 }, // 5-line
   { s:["##","##"], w:2 },                             // 2x2 square
   { s:["###","###","###"], w:1 },                     // 3x3 square
   { s:["###","###"], w:2 }, { s:["##","##","##"], w:2 }, // rects
   { s:["##","#."], w:3 }, { s:["##",".#"], w:3 },      // small L corners
-  { s:[".#","##"], w:3 }, { s:["#.", "##"], w:3 },
+  { s:[".#","##"], w:3 }, { s:["#.","##"], w:3 },
   { s:["###","#..","#.."], w:2 },                     // big L
   { s:["###","..#","..#"], w:2 },
   { s:["#..","#..","###"], w:2 },
@@ -192,10 +192,7 @@ var SHAPES = [
   { s:["###",".#."], w:2 },                           // T shapes
   { s:[".#.","###"], w:2 },
   { s:["#.","##","#."], w:2 },
-  { s:[".#","##",".#"], w:2 },
-  { s:[".##","##."], w:2 }, { s:["##.",".##"], w:2 }, // S / Z
-  { s:[".#.","###",".#."], w:1 },                     // plus
-  { s:["###","#.#","###"], w:1 }                      // ring
+  { s:[".#","##",".#"], w:2 }
 ];
 function pickShape(){
   var total = 0, i;
@@ -207,6 +204,7 @@ function pickShape(){
 
 /* ================= state ================= */
 var state = 'menu'; // menu | options | playing | gameover
+var paused = false;
 var score = 0, combo = 0;
 var board = emptyBoard();
 var tray = [];           // {shape, tone, placed, fitsNow, bx,by,bw,bh (tray draw box)}
@@ -258,7 +256,7 @@ function newTray(){
   for (var attempt = 0; attempt < 40; attempt++){
     var cand = [];
     for (var i = 0; i < 3; i++)
-      cand.push({ shape: pickShape(), tone: PIECE_TONES[(Math.random()*PIECE_TONES.length)|0],
+      cand.push({ shape: pickShape(), color: PIECE_COLORS[(Math.random()*PIECE_COLORS.length)|0],
                   placed:false, fitsNow:true });
     var any = false;
     for (i = 0; i < 3; i++) if (fitsAnywhere(board, cand[i].shape)){ any = true; break; }
@@ -275,7 +273,7 @@ function updateFits(){
   }
 }
 function startGame(){
-  score = 0; combo = 0;
+  score = 0; combo = 0; paused = false;
   board = emptyBoard();
   clearAnims = []; popups = []; drag = null;
   newTray();
@@ -301,7 +299,7 @@ function placePiece(idx, r0, c0){
   var p = tray[idx];
   var cells = shapeCells(p.shape);
   for (var i = 0; i < cells.length; i++)
-    board[r0 + cells[i].r][c0 + cells[i].c] = { tone: p.tone };
+    board[r0 + cells[i].r][c0 + cells[i].c] = { color: p.color };
   p.placed = true;
   score += cells.length;
   var cx = boardX + (c0 + shapeSize(p.shape).cols/2) * cell;
@@ -354,8 +352,9 @@ function anchorFor(p, fx, fy){
 }
 function onDown(e){
   audio();
-  if (state !== 'playing' || drag) return;
+  if (state !== 'playing' || drag || paused) return;
   var pos = evPos(e);
+  if (pos.x < 66 && pos.y < 70){ showPause(); e.preventDefault(); return; }
   var i = trayHit(pos.x, pos.y);
   if (i >= 0){
     var p = tray[i];
@@ -425,10 +424,10 @@ function rr(x, y, w, h, r){
   ctx.arcTo(x, y, x+w, y, r);
   ctx.closePath();
 }
-function drawPieceCells(shape, tone, x0, y0, cs, gap, alpha){
+function drawPieceCells(shape, color, x0, y0, cs, gap, alpha){
   var cells = shapeCells(shape);
   ctx.globalAlpha = (alpha === undefined ? 1 : alpha);
-  ctx.fillStyle = tone;
+  ctx.fillStyle = color;
   for (var i = 0; i < cells.length; i++){
     var x = x0 + cells[i].c * cs, y = y0 + cells[i].r * cs;
     rr(x + gap/2, y + gap/2, cs - gap, cs - gap, Math.min(6, cs*0.22)); ctx.fill();
@@ -448,6 +447,13 @@ function render(){
   ctx.fillText(String(score), W/2, 78);
   ctx.fillStyle = GOLD; ctx.font = '700 13px sans-serif';
   ctx.fillText('BEST  ' + best, W/2, 100);
+  /* pause button */
+  if (state === 'playing' && !paused){
+    ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(30, 34, 16, 0, Math.PI*2); ctx.stroke();
+    ctx.fillStyle = INK;
+    ctx.fillRect(24, 27, 4, 14); ctx.fillRect(32, 27, 4, 14);
+  }
 
   if (state === 'playing' || state === 'gameover'){
     var r, c, i;
@@ -468,7 +474,7 @@ function render(){
     for (r = 0; r < 8; r++) for (c = 0; c < 8; c++){
       var bcell = board[r][c];
       if (!bcell) continue;
-      ctx.fillStyle = bcell.tone;
+      ctx.fillStyle = bcell.color;
       rr(boardX + c*cell + gap/2, boardY + r*cell + gap/2, cell - gap, cell - gap, 4);
       ctx.fill();
       ctx.fillStyle = 'rgba(255,255,255,.10)';
@@ -504,7 +510,7 @@ function render(){
       ctx.translate(p.bx + p.bw/2, p.by + p.bh/2);
       ctx.scale(sc, sc);
       ctx.translate(-p.bw/2, -p.bh/2);
-      drawPieceCells(p.shape, p.tone, 0, 0, p.ds, Math.max(1.5, p.ds*0.1),
+      drawPieceCells(p.shape, p.color, 0, 0, p.ds, Math.max(1.5, p.ds*0.1),
                      (drag && drag.idx === i) ? 0 : (p.fitsNow ? 1 : 0.32));
       ctx.restore();
       /* slot divider */
@@ -520,7 +526,7 @@ function render(){
       var px = drag.fx - sz.cols * cell / 2, py = drag.fy - sz.rows * cell - 52;
       ctx.save();
       ctx.shadowColor = 'rgba(30,27,22,0.25)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 6;
-      drawPieceCells(q.shape, q.tone, px, py, cell, gap, drag.ok ? 1 : 0.55);
+      drawPieceCells(q.shape, q.color, px, py, cell, gap, drag.ok ? 1 : 0.55);
       ctx.restore();
     }
     /* combo label */
@@ -584,6 +590,17 @@ function showGameOver(){
     '<button class="btn" data-act="menu">MENU</button>'
   );
 }
+function showPause(){
+  paused = true; drag = null;
+  showOverlay(
+    '<h1 style="font-size:32px">PAUSED</h1>' +
+    '<div class="rule"></div>' +
+    '<div class="sub">TAKE A BREATHER</div>' +
+    '<button class="btn solid" data-act="resume">RESUME</button>' +
+    '<button class="btn" data-act="menu">MENU</button>' +
+    '<button class="btn" data-act="home">HOME</button>'
+  );
+}
 function wireButtons(){
   var btns = overlayEl.querySelectorAll('[data-act]');
   for (var i = 0; i < btns.length; i++){
@@ -593,7 +610,9 @@ function wireButtons(){
         var a = b.getAttribute('data-act');
         if (a === 'start') startGame();
         else if (a === 'options') showOptions();
-        else if (a === 'menu') showMenu();
+        else if (a === 'menu'){ paused = false; showMenu(); }
+        else if (a === 'home') window.location.href = 'index.html';
+        else if (a === 'resume'){ paused = false; hideOverlay(); }
         else if (a === 'exit') window.location.href = 'index.html';
         else if (a === 'sound'){
           soundOn = !soundOn; store.set('sound', soundOn ? 'on' : 'off');
