@@ -171,6 +171,13 @@
   <button id="btnAgain" class="btn primary">&#8635;&nbsp;&nbsp;PLAY AGAIN</button>
   <button id="btnHub" class="btn">&#127968;&nbsp;&nbsp;GAMES MENU</button>
 </div>
+<div id="pause" class="panel hidden">
+  <h1>PAUSED</h1>
+  <p>Take a breather</p>
+  <button id="btnResume" class="btn primary">&#9654;&nbsp;&nbsp;RESUME</button>
+  <button id="btnPauseMenu" class="btn">&#127968;&nbsp;&nbsp;GAME MENU</button>
+  <button id="btnPauseHub" class="btn">&#8962;&nbsp;&nbsp;HOME</button>
+</div>
 
 <script>
 (function(){
@@ -230,7 +237,7 @@ var playersRowEl=document.getElementById('playersRow');
 var bannerEl=document.getElementById('turnBanner');
 var turnDot=document.getElementById('turnDot');
 var turnName=document.getElementById('turnName');
-var PANELS=['menu','options','psetup','csetup','gameover'];
+var PANELS=['menu','options','psetup','csetup','gameover','pause'];
 
 var W=0,H=0,DPR=1,cell=0,bx=0,by=0,tableCv=null;
 function resize(){
@@ -1039,8 +1046,7 @@ window.addEventListener('contextmenu',function(e){e.preventDefault();});
 
 diceBtn.addEventListener('click',function(e){e.stopPropagation();sfx.click();doRoll();});
 document.getElementById('btnMenuTop').addEventListener('click',function(e){
-  e.stopPropagation();sfx.click();
-  if(confirm('Leave to the games menu?')) window.location.href='index.html';
+  e.stopPropagation();sfx.click(); showPanel('pause');
 });
 document.getElementById('btnAgain').addEventListener('click',function(e){
   e.stopPropagation();sfx.click();
@@ -1059,6 +1065,9 @@ function onTap(id,fn){
 onTap('btnStart',function(){ phase='psetup'; showPanel('psetup'); });
 onTap('btnOptions',function(){ phase='options'; showPanel('options'); });
 onTap('btnExit',function(){ window.location.href='index.html'; });
+onTap('btnResume',function(){ showPanel(null); });
+onTap('btnPauseMenu',function(){ window.location.reload(); });
+onTap('btnPauseHub',function(){ window.location.href='index.html'; });
 onTap('btnBack',function(){ phase='menu'; showPanel('menu'); });
 onTap('btnPBack',function(){ phase='menu'; showPanel('menu'); });
 onTap('btnSound',function(){
