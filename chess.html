@@ -43,6 +43,29 @@
   .promoBtn { width:64px; height:64px; font-size:38px; border-radius:14px; cursor:pointer;
     background:rgba(255,255,255,.08); border:2px solid #ffd700; color:#fff; }
   .promoBtn:active { transform:scale(.92); }
+
+  /* ===== THEME-PAGE v1 ===== */
+  body.lightbg #topbar { color:#221c11; }
+  body.lightbg #btnMenuTop { color:#221c11; border-color:#8a7a5a; background:rgba(60,45,20,.08); }
+  .themePanel { justify-content:flex-start; padding:14px 12px 18px; overflow-y:auto; background:#101014; text-align:left; }
+  .themePanel.lightbg { color:#221c11; }
+  .themeHead { display:flex; align-items:center; width:100%; max-width:430px; margin:2px auto 10px; }
+  .themeHead h2 { flex:1; text-align:center; font-size:26px; font-weight:800; letter-spacing:1px; margin:0; }
+  .themeBack { width:48px; height:44px; font-size:26px; font-weight:900; color:inherit; background:transparent; border:none; cursor:pointer; font-family:inherit; text-align:left; }
+  .themeBack:active { transform:scale(.92); }
+  .themeSpacer { width:48px; }
+  #themeBoard { display:block; margin:0 auto; border-radius:4px; box-shadow:0 6px 24px rgba(0,0,0,.45); }
+  .themeTabs { display:flex; width:100%; max-width:430px; margin:14px auto 0; overflow-x:auto; }
+  .themeTab { flex:1 0 auto; padding:10px 8px; font-size:15px; font-weight:700; color:inherit; opacity:.55; background:transparent; border:none; border-bottom:2px solid rgba(128,128,128,.35); cursor:pointer; font-family:inherit; white-space:nowrap; }
+  .themeTab.active { opacity:1; border-bottom:3px solid currentColor; }
+  #themeSelName { width:100%; max-width:430px; margin:14px auto 8px; text-align:center; font-size:16px; font-weight:700; opacity:.85; }
+  #themeOptions { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; width:100%; max-width:430px; margin:0 auto; padding-bottom:12px; }
+  .themeOpt { display:flex; align-items:center; gap:8px; padding:10px 14px; font-size:14px; font-weight:700; color:inherit; background:rgba(128,128,128,.14); border:2px solid rgba(128,128,128,.35); border-radius:12px; cursor:pointer; font-family:inherit; }
+  .themeOpt:active { transform:scale(.95); }
+  .themeOpt.sel { border-color:#ffd700; box-shadow:0 0 10px rgba(255,215,0,.35); }
+  .themeOpt .tick { color:#ffd700; font-weight:900; }
+  .themeOpt .sw { width:22px; height:22px; border-radius:5px; border:1px solid rgba(128,128,128,.6); display:inline-block; flex:none; }
+  .themeOpt .psample { font-size:24px; line-height:1; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -61,6 +84,7 @@
   <p>The royal game. Outsmart the computer or challenge a friend — checkmate wins!</p>
   <button id="btnStart" class="btn primary">&#9654;&nbsp;&nbsp;START</button>
   <button id="btnOptions" class="btn">&#9881;&nbsp;&nbsp;OPTIONS</button>
+  <button id="btnTheme" class="btn">&#127912;&nbsp;&nbsp;THEME</button>
   <button id="btnExit" class="btn danger">&#10005;&nbsp;&nbsp;EXIT</button>
 </div>
 
@@ -108,8 +132,26 @@
   <h1>PAUSED</h1>
   <p>Take a breather</p>
   <button id="btnResume" class="btn primary">&#9654;&nbsp;&nbsp;RESUME</button>
+  <button id="btnThemePause" class="btn">&#127912;&nbsp;&nbsp;THEME</button>
   <button id="btnPauseMenu" class="btn">&#127968;&nbsp;&nbsp;GAME MENU</button>
   <button id="btnPauseHub" class="btn">&#8962;&nbsp;&nbsp;HOME</button>
+</div>
+
+<div id="theme" class="panel themePanel hidden">
+  <div class="themeHead">
+    <button id="btnThemeBack" class="themeBack">&larr;</button>
+    <h2>Theme</h2>
+    <span class="themeSpacer"></span>
+  </div>
+  <canvas id="themeBoard"></canvas>
+  <div class="themeTabs">
+    <button class="themeTab" id="thTabBoard">Board</button>
+    <button class="themeTab" id="thTabPieces">Pieces</button>
+    <button class="themeTab" id="thTabBackground">Background</button>
+    <button class="themeTab" id="thTabSounds">Sounds</button>
+  </div>
+  <div id="themeSelName">&mdash;</div>
+  <div id="themeOptions"></div>
 </div>
 
 <script>
@@ -832,7 +874,7 @@ var wrap=document.getElementById('wrap');
 var turnDot=document.getElementById('turnDot');
 var turnName=document.getElementById('turnName');
 var statusEl=document.getElementById('status');
-var PANELS=['menu','options','modesetup','colorsetup','promo','gameover','pause'];
+var PANELS=['menu','options','modesetup','colorsetup','promo','gameover','pause','theme'];
 
 var S=0,DPR=1; // board px
 function resize(){
@@ -848,6 +890,147 @@ window.addEventListener('resize',resize);
 function showPanel(id){
   PANELS.forEach(function(p){document.getElementById(p).classList.toggle('hidden',p!==id);});
 }
+
+/* ================= THEME-PAGE v1 =================
+   Theme screen modelled on Hawi's reference screenshots: dark page,
+   "Theme" title, back arrow, big live preview board in the starting
+   position, tabs (Board | Pieces | Background | Sounds) and the
+   selected item's name + tappable options underneath.
+   Pieces: Glass, 8-Bit, Neon (from the screenshots) + Classic + Royal Gold.
+   Boards: Sky Blue (screenshots), Wooden Classic (original), Ivory Gold,
+   Club Green, Walnut Dark. Backgrounds: Midnight, Ivory Paper, Ocean Blue,
+   Green Felt, Walnut Sunset. Choices persist in localStorage. */
+var THEME_BOARDS=[
+  {id:'sky',name:'Sky Blue',light:'#fbfdfe',dark:'#9ec7ea',frame:'#274b73',glow:'#7fb2dd'},
+  {id:'wood',name:'Wooden Classic',light:'#eed9b7',dark:'#9c6b43',frame:'#141b33',glow:'#00e5ff'},
+  {id:'ivory',name:'Ivory Gold',light:'#f8f2df',dark:'#c2a15c',frame:'#2a2118',glow:'#d4af37'},
+  {id:'club',name:'Club Green',light:'#eaeed2',dark:'#739552',frame:'#1d2b1a',glow:'#8fce6e'},
+  {id:'walnut',name:'Walnut Dark',light:'#caa27e',dark:'#5b3a29',frame:'#170d08',glow:'#b08153'}
+];
+var THEME_PIECES=[
+  {id:'glass',name:'Glass'},
+  {id:'pixel',name:'8-Bit'},
+  {id:'neon',name:'Neon'},
+  {id:'classic',name:'Classic'},
+  {id:'royal',name:'Royal Gold'}
+];
+var THEME_BGS=[
+  {id:'midnight',name:'Midnight',css:'radial-gradient(120% 100% at 50% 0%, #141c3f 0%, #0b1026 60%, #070a1a 100%)',light:false},
+  {id:'ivory',name:'Ivory Paper',css:'radial-gradient(circle at 20% 30%, rgba(180,150,90,.16) 1.5px, transparent 1.7px) 0 0/22px 22px, linear-gradient(160deg,#fbf8f1,#f1ead9)',light:true},
+  {id:'ocean',name:'Ocean Blue',css:'linear-gradient(165deg,#0d3a6b 0%,#07294e 55%,#04182f 100%)',light:false},
+  {id:'felt',name:'Green Felt',css:'radial-gradient(110% 90% at 50% 20%, #14603f 0%, #0d3b27 60%, #07271a 100%)',light:false},
+  {id:'sunset',name:'Walnut Sunset',css:'linear-gradient(170deg,#5a2d16 0%,#3a1c0e 55%,#1e0f07 100%)',light:false}
+];
+var theme={board:'sky',pieces:'glass',bg:'midnight'};
+function themeDef(list,id){for(var i=0;i<list.length;i++)if(list[i].id===id)return list[i];return list[0];}
+function themeBoardDef(){return themeDef(THEME_BOARDS,theme.board);}
+function themeBgDef(){return themeDef(THEME_BGS,theme.bg);}
+try{
+  var _tb=localStorage.getItem('chess_theme_board');
+  var _tp=localStorage.getItem('chess_theme_pieces');
+  var _tg=localStorage.getItem('chess_theme_bg');
+  if(_tb&&themeDef(THEME_BOARDS,_tb).id===_tb)theme.board=_tb;
+  if(_tp&&themeDef(THEME_PIECES,_tp).id===_tp)theme.pieces=_tp;
+  if(_tg&&themeDef(THEME_BGS,_tg).id===_tg)theme.bg=_tg;
+}catch(e){}
+var LIGHT,DARK,FRAME,FRAMEGLOW;
+function applyTheme(){
+  var bd=themeBoardDef();
+  LIGHT=bd.light;DARK=bd.dark;FRAME=bd.frame;FRAMEGLOW=bd.glow;
+  var bg=themeBgDef();
+  if(document.body){
+    document.body.style.background=bg.css;
+    document.body.classList.toggle('lightbg',!!bg.light);
+  }
+  var tp=document.getElementById('theme');
+  if(tp){tp.style.background=bg.css;tp.classList.toggle('lightbg',!!bg.light);}
+}
+function setThemePart(part,id){
+  theme[part]=id;
+  try{localStorage.setItem('chess_theme_'+part,id);}catch(e){}
+  applyTheme();
+  renderThemeOptions();
+  drawPreview();
+}
+function pieceSampleStyle(id){
+  if(id==='glass')return 'color:#cfdde8;text-shadow:0 0 3px #7f95a8,0 1px 2px rgba(0,0,0,.55)';
+  if(id==='pixel')return 'color:#f2b53a;text-shadow:2px 2px 0 #4a4a52';
+  if(id==='neon')return 'color:#ff5f6e;text-shadow:0 0 6px #ff1744,0 0 12px rgba(255,23,68,.7)';
+  if(id==='royal')return 'color:#d4af37;text-shadow:0 0 6px rgba(212,175,55,.65),0 1px 2px rgba(0,0,0,.6)';
+  return 'color:#e9e1cd;text-shadow:0 1px 2px rgba(0,0,0,.7)';
+}
+var themeTab='pieces',themeFrom='menu';
+function showThemeTab(tab){
+  themeTab=tab;
+  renderThemeOptions();
+}
+function renderThemeOptions(){
+  var tabIds={board:'thTabBoard',pieces:'thTabPieces',background:'thTabBackground',sounds:'thTabSounds'};
+  for(var k in tabIds){
+    var tel=document.getElementById(tabIds[k]);
+    if(tel)tel.classList.toggle('active',k===themeTab);
+  }
+  var box=document.getElementById('themeOptions');
+  var nameEl=document.getElementById('themeSelName');
+  if(!box||!nameEl)return;
+  box.innerHTML='';
+  if(themeTab==='sounds'){
+    nameEl.textContent='Sound: '+(soundOn?'ON':'OFF');
+    var sb=document.createElement('button');
+    sb.className='themeOpt'+(soundOn?' sel':'');
+    sb.innerHTML=(soundOn?'&#128266;':'&#128263;')+'<span>SOUND: '+(soundOn?'ON':'OFF')+'</span>'+(soundOn?'<span class="tick">&#10003;</span>':'');
+    sb.addEventListener('click',function(){
+      soundOn=!soundOn;
+      try{localStorage.setItem('chessSound',soundOn?'on':'off');}catch(e){}
+      refreshOptionsUI();
+      renderThemeOptions();
+    });
+    box.appendChild(sb);
+    return;
+  }
+  var list=themeTab==='board'?THEME_BOARDS:(themeTab==='pieces'?THEME_PIECES:THEME_BGS);
+  var part=themeTab==='board'?'board':(themeTab==='pieces'?'pieces':'bg');
+  var cur=theme[part],curDef=themeDef(list,cur);
+  nameEl.textContent=curDef.name;
+  list.forEach(function(def){
+    var btn=document.createElement('button');
+    btn.className='themeOpt'+(def.id===cur?' sel':'');
+    var sw='';
+    if(part==='board')sw='<span class="sw" style="background:linear-gradient(135deg,'+def.light+' 50%,'+def.dark+' 50%)"></span>';
+    else if(part==='bg')sw='<span class="sw" style="background:'+def.css+'"></span>';
+    else sw='<span class="psample" style="'+pieceSampleStyle(def.id)+'">&#9822;</span>';
+    btn.innerHTML=sw+'<span>'+def.name+'</span>'+(def.id===cur?'<span class="tick">&#10003;</span>':'');
+    btn.addEventListener('click',function(){sfx.click();setThemePart(part,def.id);});
+    box.appendChild(btn);
+  });
+}
+function openTheme(from){
+  themeFrom=from||'menu';
+  showPanel('theme');
+  renderThemeOptions();
+  drawPreview();
+}
+function drawPreview(){
+  var c=document.getElementById('themeBoard');
+  if(!c||!c.getContext)return;
+  var dpr=Math.min(window.devicePixelRatio||1,2);
+  var avail=(window.innerWidth||360)-28;
+  if(avail<220)avail=220;if(avail>430)avail=430;
+  c.width=Math.round(avail*dpr);c.height=Math.round(avail*dpr);
+  c.style.width=avail+'px';c.style.height=avail+'px';
+  var pctx=c.getContext('2d');
+  if(pctx.setTransform)pctx.setTransform(dpr,0,0,dpr,0,0);
+  var sCtx=ctx,sS=S,sSt=st,sFlip=flipped,sSel=selected,sSelM=selMoves,sLast=lastMove,sChk=checkSq;
+  ctx=pctx;S=avail;st=initialState();flipped=false;selected=-1;selMoves=[];lastMove=null;checkSq=-1;
+  draw();
+  ctx=sCtx;S=sS;st=sSt;flipped=sFlip;selected=sSel;selMoves=sSelM;lastMove=sLast;checkSq=sChk;
+  if(st)draw();
+}
+[['thTabBoard','board'],['thTabPieces','pieces'],['thTabBackground','background'],['thTabSounds','sounds']].forEach(function(pair){
+  var el=document.getElementById(pair[0]);
+  if(el)el.addEventListener('click',function(e){e.stopPropagation();sfx.click();showThemeTab(pair[1]);});
+});
+applyTheme();
 
 var soundOn=true,difficulty='normal';
 try{
@@ -986,7 +1169,7 @@ function gameOver(kind,winner){
 }
 
 /* ================= Drawing ================= */
-var LIGHT='#eed9b7',DARK='#9c6b43';
+/* LIGHT/DARK/FRAME/FRAMEGLOW are set by applyTheme() (THEME-PAGE v1) */
 function sqXY(i){ // display coords
   var r=i>>3,c=i&7;
   if(flipped){r=7-r;c=7-c;}
@@ -998,8 +1181,8 @@ function draw(){
   ctx.clearRect(0,0,S,S);
   /* frame */
   ctx.save();
-  ctx.shadowColor='#00e5ff';ctx.shadowBlur=18;
-  ctx.fillStyle='#141b33';
+  ctx.shadowColor=FRAMEGLOW;ctx.shadowBlur=18;
+  ctx.fillStyle=FRAME;
   ctx.fillRect(0,0,S,S);
   ctx.restore();
   var pad=sq*0.28, bs=S-pad*2, cell=bs/8, ox=pad, oy=pad;
@@ -1076,7 +1259,117 @@ function draw(){
     ctx.restore();
   }
 }
+
+/* ---------- Piece sets (THEME-PAGE v1) ---------- */
+function glyphText(px,py,size,glyph,fill,stroke,lw){
+  ctx.font=size+'px serif';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  if(stroke){ctx.lineWidth=lw||2;ctx.strokeStyle=stroke;ctx.strokeText(glyph,px,py);}
+  ctx.fillStyle=fill;
+  ctx.fillText(glyph,px,py);
+}
+function pieceShadow(px,py,pr,alpha){
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,'+alpha+')';
+  ctx.beginPath();
+  ctx.ellipse(px+pr*0.08,py+pr*0.42,pr*0.78,pr*0.34,0,0,6.3);
+  ctx.fill();
+  ctx.restore();
+}
+function drawPieceGlass(px,py,pr,piece){
+  pieceShadow(px,py,pr,0.22);
+  var glyph=GLYPHS[piece.c][piece.t];
+  var g=ctx.createLinearGradient(px,py-pr,px,py+pr);
+  if(piece.c==='w'){
+    g.addColorStop(0,'rgba(255,255,255,0.98)');
+    g.addColorStop(0.55,'rgba(214,232,244,0.90)');
+    g.addColorStop(1,'rgba(158,190,214,0.88)');
+  }else{
+    g.addColorStop(0,'rgba(198,207,214,0.98)');
+    g.addColorStop(0.55,'rgba(122,133,143,0.96)');
+    g.addColorStop(1,'rgba(60,68,76,0.98)');
+  }
+  glyphText(px,py+pr*0.05,pr*1.62,glyph,g,piece.c==='w'?'rgba(105,130,152,0.95)':'rgba(28,34,40,0.95)',Math.max(1.2,pr*0.05));
+  ctx.save();
+  ctx.fillStyle='rgba(255,255,255,0.38)';
+  ctx.beginPath();
+  ctx.ellipse(px-pr*0.30,py-pr*0.48,pr*0.20,pr*0.10,-0.6,0,6.3);
+  ctx.fill();
+  ctx.restore();
+}
+function drawPieceNeon(px,py,pr,piece){
+  pieceShadow(px,py,pr,0.30);
+  var glyph=GLYPHS.b[piece.t]; /* filled shapes on both sides, like the screenshot */
+  ctx.save();
+  ctx.shadowColor=piece.c==='w'?'#29b6f6':'#ff1744';
+  ctx.shadowBlur=pr*0.5;
+  glyphText(px,py+pr*0.05,pr*1.56,glyph,
+    piece.c==='w'?'#c9f4ff':'#ff5f6e',
+    piece.c==='w'?'rgba(25,110,150,0.85)':'rgba(140,10,40,0.9)',
+    Math.max(1.2,pr*0.05));
+  ctx.restore();
+}
+var pixelSprites={};
+function pixelSprite(piece){
+  var key=piece.c+piece.t;
+  if(pixelSprites[key])return pixelSprites[key];
+  var cv=null;
+  try{cv=document.createElement('canvas');}catch(e){}
+  if(!cv)return null;
+  cv.width=14;cv.height=14;
+  var g2=cv.getContext('2d');
+  g2.textAlign='center';g2.textBaseline='middle';
+  g2.font='13px serif';
+  g2.fillStyle=piece.c==='w'?'#a86f14':'#26262c';
+  g2.fillText(GLYPHS.b[piece.t],7,8);
+  g2.font='11.5px serif';
+  g2.fillStyle=piece.c==='w'?'#f2b53a':'#55565e';
+  g2.fillText(GLYPHS.b[piece.t],7,8);
+  pixelSprites[key]=cv;
+  return cv;
+}
+function drawPiecePixel(px,py,pr,piece){
+  pieceShadow(px,py,pr,0.28);
+  var spr=pixelSprite(piece);
+  var size=pr*2.0;
+  if(!spr){
+    glyphText(px,py+pr*0.05,pr*1.5,GLYPHS.b[piece.t],piece.c==='w'?'#f2b53a':'#55565e',null);
+    return;
+  }
+  ctx.save();
+  ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(spr,px-size/2,py-size/2,pr*2.0,pr*2.0);
+  ctx.restore();
+}
+function drawPieceRoyal(px,py,pr,piece){
+  pieceShadow(px,py,pr,0.35);
+  var g=ctx.createRadialGradient(px-pr*0.35,py-pr*0.4,pr*0.1,px,py,pr);
+  if(piece.c==='w'){g.addColorStop(0,'#ffffff');g.addColorStop(0.55,'#d9dfe5');g.addColorStop(1,'#939ea8');}
+  else{g.addColorStop(0,'#ffedb0');g.addColorStop(0.55,'#d4af37');g.addColorStop(1,'#8a6414');}
+  ctx.fillStyle=g;
+  ctx.beginPath();ctx.arc(px,py,pr,0,6.3);ctx.fill();
+  ctx.lineWidth=Math.max(2,pr*0.10);
+  ctx.strokeStyle='#b8860b';
+  ctx.beginPath();ctx.arc(px,py,pr,0,6.3);ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,0.45)';
+  ctx.lineWidth=Math.max(1.5,pr*0.05);
+  ctx.beginPath();ctx.arc(px,py,pr*0.76,Math.PI*1.05,Math.PI*1.95);ctx.stroke();
+  var glyph=GLYPHS[piece.c][piece.t];
+  ctx.font=(pr*1.3)+'px serif';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle=piece.c==='w'?'rgba(90,70,20,0.45)':'rgba(40,26,2,0.55)';
+  ctx.fillText(glyph,px,py+pr*0.12+1.5);
+  ctx.fillStyle=piece.c==='w'?'#6d5410':'#38270a';
+  ctx.fillText(glyph,px,py+pr*0.12);
+}
 function drawPiece(px,py,pr,piece){
+  if(theme.pieces==='glass')return drawPieceGlass(px,py,pr,piece);
+  if(theme.pieces==='pixel')return drawPiecePixel(px,py,pr,piece);
+  if(theme.pieces==='neon')return drawPieceNeon(px,py,pr,piece);
+  if(theme.pieces==='royal')return drawPieceRoyal(px,py,pr,piece);
+  return drawPieceClassic(px,py,pr,piece);
+}
+function drawPieceClassic(px,py,pr,piece){
   ctx.save();
   ctx.fillStyle='rgba(0,0,0,0.35)';
   ctx.beginPath();
@@ -1171,6 +1464,12 @@ function onTap(id,fn){
 }
 onTap('btnStart',function(){phase='modesetup';showPanel('modesetup');});
 onTap('btnOptions',function(){phase='options';showPanel('options');});
+onTap('btnTheme',function(){openTheme('menu');});
+onTap('btnThemePause',function(){openTheme('pause');});
+onTap('btnThemeBack',function(){
+  if(themeFrom==='pause'){showPanel('pause');}
+  else{phase='menu';showPanel('menu');}
+});
 onTap('btnExit',function(){window.location.href='index.html';});
 onTap('btnBack',function(){phase='menu';showPanel('menu');});
 onTap('btnModeBack',function(){phase='menu';showPanel('menu');});
