@@ -33,7 +33,7 @@
   .panel p { font-size:15px; opacity:.85; margin:8px 0 18px; max-width:340px; line-height:1.5; }
   .btn { display:block; width:260px; margin:8px 0; padding:14px 0; font-size:17px; font-weight:800;
     letter-spacing:2px; color:#fff; background:rgba(0,229,255,0.08); border:2px solid #00e5ff;
-    border-radius:14px; box-shadow:0 0 16px rgba(0,229,255,.35); cursor:pointer; font-family:inherit; }
+    border-radius:14px; box-shadow:0 8px 20px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.25), 0 0 16px rgba(0,229,255,.35); cursor:pointer; font-family:inherit; }
   .btn:active { transform:scale(.96); }
   .btn.primary { border-color:#ff2fd6; background:rgba(255,47,214,.12);
     box-shadow:0 0 18px rgba(255,47,214,.45); }
@@ -83,6 +83,17 @@
   .pill { flex:none; font-size:11px; font-weight:800; letter-spacing:.5px; padding:5px 10px;
     border-radius:999px; background:rgba(255,255,255,.14); }
   .pill.think { background:#ffd700; color:#221c11; }
+  .clk { flex:none; font:700 15px ui-monospace, Menlo, monospace; letter-spacing:.5px;
+    padding:6px 10px; border-radius:9px; background:rgba(0,0,0,.28); color:#fff;
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.12); }
+  .clk.on { border:2px solid #ffd700; box-shadow:0 0 10px rgba(255,215,0,.4), inset 0 1px 3px rgba(0,0,0,.5); }
+  .clk.low { color:#ff8080; border-color:#ff5555; }
+  body.lightbg .clk { background:rgba(60,45,20,.12); color:#221c11; }
+  /* ===== MATEFIX-3D v3: realistic depth (Glass-style) ===== */
+  #board { border-radius:6px; box-shadow:0 18px 40px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.10); }
+  .playerCard { box-shadow:0 8px 18px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.18); }
+  .pav { box-shadow:inset 0 2px 4px rgba(255,255,255,.35), inset 0 -3px 6px rgba(0,0,0,.30), 0 3px 8px rgba(0,0,0,.30); }
+  #themeBoard { box-shadow:0 14px 34px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.12); }
   #moveBar { margin:6px 12px 0; padding:8px 10px; min-height:34px; overflow-x:auto; white-space:nowrap;
     background:rgba(255,255,255,.06); border-radius:10px; color:#fff; font:600 13px ui-monospace, Menlo, monospace; text-align:left; }
   body.lightbg #moveBar { color:#221c11; background:rgba(60,45,20,.08); }
@@ -145,6 +156,16 @@
   <button id="btnModeBack" class="btn">&larr;&nbsp;&nbsp;BACK</button>
 </div>
 
+<div id="timesetup" class="panel hidden">
+  <h1>TIME CONTROL</h1>
+  <p>Friendly match only — clocks are not used against the computer.</p>
+  <button id="btnTime0" class="btn primary">&#128337;&nbsp;&nbsp;NO CLOCK</button>
+  <button id="btnTime3" class="btn">&#128337;&nbsp;&nbsp;3 MINUTES</button>
+  <button id="btnTime5" class="btn">&#128337;&nbsp;&nbsp;5 MINUTES</button>
+  <button id="btnTime10" class="btn">&#128337;&nbsp;&nbsp;10 MINUTES</button>
+  <button id="btnTimeBack" class="btn">&larr;&nbsp;&nbsp;BACK</button>
+</div>
+
 <div id="colorsetup" class="panel hidden">
   <h1>YOUR COLOR</h1>
   <p>White moves first.</p>
@@ -199,6 +220,11 @@
 <script>
 (function(){
 'use strict';
+/* ================= MATEFIX-3D v3 (2026-10-24) =================
+   Mate-bug fix (checkmate moves are never swapped away; blunder check uses
+   LEGAL opponent replies only) + friendly-mode-only clocks + realistic 3D
+   board/piece rendering (Glass-style sheen, bevel frame, depth shadows).
+   REASONING-AI v3, THEME-PAGE v1, POLISHED v2 markers all still present. */
 
 /* ================= POLISHED v2 (2026-10-24) =================
    Glass-Chess-inspired polish (player cards, move list, drag, controls,
@@ -829,6 +855,35 @@ function openingRootBonus(st,m){
   }
   return bonus;
 }
+/* MATEFIX-3D v3: does move m deliver checkmate? (opponent has no legal
+   move and is in check). Used so a mate can never be swapped away. */
+function isMateMove(st,m){
+  var nst=clone(st);doMove(nst,m);
+  return genMoves(nst,false).length===0&&inCheck(nst,nst.turn);
+}
+/* MATEFIX-3D v3: worst profitable capture, but only counting captures that
+   are LEGAL replies. The old raw attack-map version counted e.g. a mated
+   king "capturing" the mating queen even though that capture leaves the
+   king in check (illegal) — that phantom 900-point threat is what demoted
+   mates. genMoves() already filters illegal moves, so we intersect the
+   attack map with the opponent's actual legal captures. */
+function legalWorstThreat(afterSt,color){
+  var enemy=opp(color);
+  var caps=genMoves(afterSt,false);
+  var worst=0;
+  for(var i=0;i<64;i++){
+    var pc=afterSt.b[i];if(!pc||pc.c!==color||pc.t==='k')continue;
+    if(!isAttacked(afterSt.b,i,enemy))continue;
+    var atk=attackersOf(afterSt.b,i,enemy),legal=false;
+    for(var a=0;a<atk.length&&!legal;a++)
+      for(var k=0;k<caps.length;k++)
+        if(caps[k].cap&&caps[k].from===atk[a]&&caps[k].to===i){legal=true;break;}
+    if(!legal)continue;
+    var g=seeCapture(afterSt.b,i,enemy);
+    if(g>worst)worst=g;
+  }
+  return worst;
+}
 function aiBestMove(st,depth,randomness){
   nodes=0;searchAborted=false;killers=[];historyT={};
   searchDeadline=Date.now()+(depth>=4?2100:depth===3?1200:600);
@@ -878,6 +933,15 @@ function aiBestMove(st,depth,randomness){
   if(!scored){ /* first pass aborted (extreme): fall back to move ordering */
     scored=moves.map(function(m){return {m:m,s:0};});
   }
+  /* MATEFIX-3D v3: if any scored move delivers checkmate, play it — no
+     book preference, no bonus, no blunder check may replace it. If several
+     moves mate, take the highest-scored one. This also fixes aspiration-
+     window ties where several moves scored as mates. */
+  var mateBest=null,mateScore=-Infinity;
+  for(var mi=0;mi<scored.length;mi++){
+    if(isMateMove(st,scored[mi].m)&&scored[mi].s>mateScore){mateScore=scored[mi].s;mateBest=scored[mi].m;}
+  }
+  if(mateBest)return mateBest;
   var best=scored[0].m,bestScore=-Infinity,bestAdj=-Infinity;
   for(var j2=0;j2<scored.length;j2++){
     var e=scored[j2],bonus=0;
@@ -901,12 +965,12 @@ function aiBestMove(st,depth,randomness){
      does not leave it hanging, take the alternative instead. */
   if(depth>=2&&scored.length>1){
     var afterBest=clone(st);doMove(afterBest,best);
-    var danger=worstThreat(afterBest,st.turn);
+    var danger=legalWorstThreat(afterBest,st.turn);
     if(danger>=180){
       for(var j=0;j<scored.length;j++){
         if(scored[j].m===best||scored[j].s<bestScore-130)continue;
         var altSt=clone(st);doMove(altSt,scored[j].m);
-        if(worstThreat(altSt,st.turn)<=danger-120){best=scored[j].m;bestScore=scored[j].s;break;}
+        if(legalWorstThreat(altSt,st.turn)<=danger-120){best=scored[j].m;bestScore=scored[j].s;break;}
       }
     }
   }
@@ -920,7 +984,7 @@ var wrap=document.getElementById('wrap');
 var turnDot=document.getElementById('turnDot');
 var turnName=document.getElementById('turnName');
 var statusEl=document.getElementById('status');
-var PANELS=['menu','options','modesetup','colorsetup','promo','gameover','pause','theme'];
+var PANELS=['menu','options','modesetup','timesetup','colorsetup','promo','gameover','pause','theme'];
 
 var S=0,DPR=1; // board px
 function resize(){
@@ -1142,6 +1206,24 @@ var selected=-1,selMoves=[],lastMove=null,checkSq=-1,phase='menu';
 var pendingPromo=null;
 var animMove=null,animStart=0,drag=null;
 var moveHist=[],captured=[],undoStack=[];
+/* MATEFIX-3D v3 clocks — FRIENDLY MODE ONLY. AI mode never sets
+   friendlyTime into a clock (see renderPlayers/newGame guards). */
+var friendlyTime=0; /* minutes; 0 = no clock */
+try{var _ft=parseInt(localStorage.getItem('chessFriendlyTime')||'0',10);
+  if(_ft===3||_ft===5||_ft===10)friendlyTime=_ft;}catch(e){}
+var clockMs={w:0,b:0},clockLast=0;
+function fmtClock(ms){var t=Math.max(0,Math.ceil(ms/1000));return Math.floor(t/60)+':'+String(t%60).padStart(2,'0');}
+function panelsHidden(){for(var i=0;i<PANELS.length;i++){var el=document.getElementById(PANELS[i]);if(el&&!el.classList.contains('hidden'))return false;}return true;}
+function clockTick(){
+  if(!st||phase!=='play'||mode!=='2p'||!friendlyTime||document.hidden||!panelsHidden()){clockLast=performance.now();return;}
+  var now=performance.now(),dt=now-clockLast;clockLast=now;
+  if(dt>1000)dt=1000; /* tab-switch clamp */
+  clockMs[st.turn]-=dt;
+  if(clockMs[st.turn]<=0){clockMs[st.turn]=0;gameOver('time',opp(st.turn));return;}
+  var sec=Math.ceil(clockMs[st.turn]/1000);
+  if(sec!==clockTick._sec){clockTick._sec=sec;renderPlayers();}
+}
+setInterval(clockTick,250);
 function sqName(i){return 'abcdefgh'[i&7]+(8-(i>>3));}
 function moveNotation(m,before){
   if(m.castle)return m.castle==='K'?'O-O':'O-O-O';
@@ -1155,7 +1237,7 @@ function recordMove(m){
   moveHist.push(moveNotation(m,st));
   if(m.cap)captured.push({piece:m.cap,by:st.turn});
 }
-function pushUndo(){undoStack.push({st:clone(st),last:lastMove,check:checkSq,moves:moveHist.slice(),caps:captured.slice()});}
+function pushUndo(){undoStack.push({st:clone(st),last:lastMove,check:checkSq,moves:moveHist.slice(),caps:captured.slice(),clock:{w:clockMs.w,b:clockMs.b}});}
 function renderPlayers(){
   if(!st)return;
   var topC=flipped?'w':'b',botC=flipped?'b':'w';
@@ -1173,12 +1255,13 @@ function renderPlayers(){
     var lead=(color==='w'?diff:-diff);
     var thinking=(mode==='ai'&&color!==humanColor&&phase==='play'&&!isHumanTurn());
     var turn=(phase==='play'&&st.turn===color);
+    var clkHtml=(mode==='2p'&&friendlyTime)?'<span class="clk'+(turn?' on':'')+(clockMs[color]<20000?' low':'')+'">'+fmtClock(clockMs[color])+'</span>':'';
     el.className='playerCard'+(turn?' turn':'');
     el.innerHTML='<span class="pav '+color+'">'+GLYPHS[color].k+'</span>'+
       '<span class="pn"><b>'+name+'</b><br><span>'+sub+'</span><br><span class="pcap">'+
       caps.map(function(c2){return GLYPHS[c2.piece.c][c2.piece.t];}).join('')+
       (lead>0?'<span class="adv">+'+lead+'</span>':'')+'</span></span>'+
-      (thinking?'<span class="pill think">Thinking&hellip;</span>':(turn?'<span class="pill">To move</span>':''));
+      (thinking?'<span class="pill think">Thinking&hellip;</span>':(turn?'<span class="pill">To move</span>':''))+clkHtml;
   }
   card(topC);card(botC);
 }
@@ -1201,6 +1284,7 @@ function doUndo(){
   var snap=null;
   for(var k=0;k<n;k++)snap=undoStack.pop();
   st=snap.st;lastMove=snap.last;checkSq=snap.check;moveHist=snap.moves;captured=snap.caps;
+  if(snap.clock)clockMs={w:snap.clock.w,b:snap.clock.b};clockLast=performance.now();
   selected=-1;selMoves=[];pendingPromo=null;animMove=null;drag=null;
   syncTop();renderMoves();draw();
 }
@@ -1223,6 +1307,9 @@ function newGame(){
   selected=-1;selMoves=[];lastMove=null;checkSq=-1;pendingPromo=null;
   moveHist=[];captured=[];undoStack=[];animMove=null;drag=null;
   flipped=(mode==='ai'&&humanColor==='b');
+  /* Friendly clocks only: AI mode always starts with no clock. */
+  clockMs={w:friendlyTime*60000,b:friendlyTime*60000};
+  clockLast=performance.now();clockTick._sec=-1;
   phase='play';
   showPanel(null);
   syncTop();
@@ -1307,6 +1394,10 @@ function gameOver(kind,winner){
       if(winner===humanColor){s.textContent='You win! Brilliant! \uD83C\uDFC6';sfx.win();}
       else{s.textContent='Computer wins. Try again!';sfx.lose();}
     }else{s.textContent=colorName(winner)+' wins! \uD83C\uDFC6';sfx.win();}
+  }else if(kind==='time'){
+    t.textContent='TIME OUT';
+    s.textContent=colorName(winner)+' wins — opponent ran out of time.';
+    sfx.win();
   }else if(kind==='stalemate'){
     t.textContent='STALEMATE';
     s.textContent='Draw — no legal moves.';
@@ -1324,6 +1415,13 @@ function gameOver(kind,winner){
 
 /* ================= Drawing ================= */
 /* LIGHT/DARK/FRAME/FRAMEGLOW are set by applyTheme() (THEME-PAGE v1) */
+function shadeColor(hex,amt){
+  var n=parseInt(hex.slice(1),16);
+  var r=Math.max(0,Math.min(255,(n>>16)+amt));
+  var g=Math.max(0,Math.min(255,((n>>8)&255)+amt));
+  var b=Math.max(0,Math.min(255,(n&255)+amt));
+  return 'rgb('+r+','+g+','+b+')';
+}
 function sqXY(i){ // display coords
   var r=i>>3,c=i&7;
   if(flipped){r=7-r;c=7-c;}
@@ -1333,12 +1431,16 @@ function draw(){
   if(!st)return;
   var sq=S/8;
   ctx.clearRect(0,0,S,S);
-  /* frame */
+  /* MATEFIX-3D v3 frame: bevelled physical board — soft drop shadow,
+     light-from-top-left gradient, bright top edge highlight. */
   ctx.save();
-  ctx.shadowColor=FRAMEGLOW;ctx.shadowBlur=18;
-  ctx.fillStyle=FRAME;
+  ctx.shadowColor='rgba(0,0,0,0.55)';ctx.shadowBlur=28;ctx.shadowOffsetY=10;
+  var fg=ctx.createLinearGradient(0,0,S,S);
+  fg.addColorStop(0,shadeColor(FRAME,30));fg.addColorStop(0.5,FRAME);fg.addColorStop(1,shadeColor(FRAME,-30));
+  ctx.fillStyle=fg;
   ctx.fillRect(0,0,S,S);
   ctx.restore();
+  ctx.save();ctx.strokeStyle='rgba(255,255,255,0.22)';ctx.lineWidth=1.5;ctx.strokeRect(1,1,S-2,S-2);ctx.restore();
   var pad=sq*0.28, bs=S-pad*2, cell=bs/8, ox=pad, oy=pad;
   function X(c){return ox+c*cell;}
   function Y(r){return oy+r*cell;}
@@ -1347,7 +1449,22 @@ function draw(){
     var lightSq=(r+c)%2===0;
     ctx.fillStyle=lightSq?LIGHT:DARK;
     ctx.fillRect(X(c),Y(r),cell,cell);
+    /* MATEFIX-3D v3 square sheen (Glass-style radial light falloff,
+       varied per square so the board never looks flat). */
+    var variant=(r*3+c)%4;
+    var gx=X(c)+cell*(variant===0?0.28:variant===1?0.72:variant===2?0.30:0.70);
+    var gy=Y(r)+cell*(variant===0?0.30:variant===1?0.28:variant===2?0.72:0.70);
+    var sh=ctx.createRadialGradient(gx,gy,cell*0.05,gx,gy,cell*0.95);
+    if(lightSq){sh.addColorStop(0,'rgba(255,255,255,0.42)');sh.addColorStop(0.55,'rgba(255,255,255,0.08)');sh.addColorStop(1,'rgba(0,0,0,0.06)');}
+    else{sh.addColorStop(0,'rgba(255,255,255,0.16)');sh.addColorStop(0.55,'rgba(255,255,255,0.02)');sh.addColorStop(1,'rgba(0,0,0,0.18)');}
+    ctx.fillStyle=sh;ctx.fillRect(X(c),Y(r),cell,cell);
   }
+  /* inner bevel shadow where the board meets its frame */
+  ctx.save();
+  var eg=ctx.createLinearGradient(ox,oy,ox,oy+cell*0.6);
+  eg.addColorStop(0,'rgba(0,0,0,0.28)');eg.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=eg;ctx.fillRect(ox,oy,bs,cell*0.6);
+  ctx.restore();
   /* last move + check + selected */
   function hl(i,color){
     if(i<0)return;
@@ -1411,7 +1528,12 @@ function draw(){
   if(drag&&drag.active){
     var dr2=canvas.getBoundingClientRect();
     var dpc=st.b[drag.from];
-    if(dpc)drawPiece(drag.x-dr2.left,drag.y-dr2.top,cell*0.44,dpc);
+    if(dpc){
+      /* lifted piece casts a bigger, softer shadow — the 3D lift cue */
+      ctx.save();ctx.fillStyle='rgba(0,0,0,0.35)';
+      ctx.beginPath();ctx.ellipse(drag.x-dr2.left+cell*0.04,drag.y-dr2.top+cell*0.22,cell*0.36,cell*0.16,0,0,6.3);ctx.fill();ctx.restore();
+      drawPiece(drag.x-dr2.left,drag.y-dr2.top,cell*0.44,dpc);
+    }
   }
   /* selected glow */
   if(selected>=0){
@@ -1733,7 +1855,11 @@ onTap('btnExit',function(){window.location.href='index.html';});
 onTap('btnBack',function(){phase='menu';showPanel('menu');});
 onTap('btnModeBack',function(){phase='menu';showPanel('menu');});
 onTap('btnVsCpu',function(){phase='colorsetup';showPanel('colorsetup');});
-onTap('btnVsFriend',function(){mode='2p';newGame();});
+onTap('btnVsFriend',function(){phase='timesetup';showPanel('timesetup');});
+[['btnTime0',0],['btnTime3',3],['btnTime5',5],['btnTime10',10]].forEach(function(pair){
+  onTap(pair[0],function(){friendlyTime=pair[1];try{localStorage.setItem('chessFriendlyTime',String(pair[1]));}catch(e){}mode='2p';newGame();});
+});
+onTap('btnTimeBack',function(){phase='modesetup';showPanel('modesetup');});
 onTap('btnWhite',function(){mode='ai';humanColor='w';newGame();});
 onTap('btnBlack',function(){mode='ai';humanColor='b';newGame();});
 onTap('btnSound',function(){
