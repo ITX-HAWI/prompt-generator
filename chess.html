@@ -116,9 +116,14 @@
 (function(){
 'use strict';
 
-/* ================= Engine ================= */
+/* ================= Engine =================
+   STRATEGY-AI v2 (2026-10-24): opening book + opening principles,
+   tapered MG/EG evaluation (material, PSTs, mobility, centre control,
+   bishop pair, knight outposts, rook files/7th rank, king safety,
+   pawn structure, development, endgame passed-pawn + king activity),
+   quiescence search, MVV-LVA + killer/history move ordering. */
 var VAL={p:100,n:320,b:330,r:500,q:900,k:0};
-var PST={
+var PST_MG={
 p:[0,0,0,0,0,0,0,0,50,50,50,50,50,50,50,50,10,10,20,30,30,20,10,10,5,5,10,25,25,10,5,5,0,0,0,20,20,0,0,0,5,-5,-10,0,0,-10,-5,5,5,10,10,-20,-20,10,10,5,0,0,0,0,0,0,0,0],
 n:[-50,-40,-30,-30,-30,-30,-40,-50,-40,-20,0,0,0,0,-20,-40,-30,0,10,15,15,10,0,-30,-30,5,15,20,20,15,5,-30,-30,0,15,20,20,15,0,-30,-30,5,10,15,15,10,5,-30,-40,-20,0,5,5,0,-20,-40,-50,-40,-30,-30,-30,-30,-40,-50],
 b:[-20,-10,-10,-10,-10,-10,-10,-20,-10,0,0,0,0,0,0,-10,-10,0,5,10,10,5,0,-10,-10,5,5,10,10,5,5,-10,-10,0,10,10,10,10,0,-10,-10,10,10,10,10,10,10,-10,-10,5,0,0,0,0,5,-10,-20,-10,-10,-10,-10,-10,-10,-20],
@@ -126,6 +131,30 @@ r:[0,0,0,0,0,0,0,0,5,10,10,10,10,10,10,5,-5,0,0,0,0,0,0,-5,-5,0,0,0,0,0,0,-5,-5,
 q:[-20,-10,-10,-5,-5,-10,-10,-20,-10,0,0,0,0,0,0,-10,-10,0,5,5,5,5,0,-10,-5,0,5,5,5,5,0,-5,0,0,5,5,5,5,0,-5,-10,5,5,5,5,5,0,-10,-10,0,5,0,0,0,0,-10,-20,-10,-10,-5,-5,-10,-10,-20],
 k:[-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-20,-30,-30,-40,-40,-30,-30,-20,-10,-20,-20,-20,-20,-20,-20,-10,20,20,0,0,0,0,20,20,20,30,10,0,0,10,30,20]
 };
+var PST_EG={
+p:[0,0,0,0,0,0,0,0,70,70,70,70,70,70,70,70,45,45,45,45,45,45,45,45,25,25,30,35,35,30,25,25,10,10,15,25,25,15,10,10,5,5,10,15,15,10,5,5,5,5,5,5,5,5,5,5,0,0,0,0,0,0,0,0],
+n:[-40,-30,-20,-20,-20,-20,-30,-40,-30,-15,0,0,0,0,-15,-30,-20,0,10,15,15,10,0,-20,-20,5,15,20,20,15,5,-20,-20,0,15,20,20,15,0,-20,-20,5,10,15,15,10,5,-20,-30,-15,0,5,5,0,-15,-30,-40,-30,-20,-20,-20,-20,-30,-40],
+b:[-15,-10,-10,-10,-10,-10,-10,-15,-10,0,0,0,0,0,0,-10,-10,0,5,10,10,5,0,-10,-10,5,5,10,10,5,5,-10,-10,0,10,10,10,10,0,-10,-10,5,10,10,10,5,-10,-10,-10,0,0,0,0,0,0,-10,-15,-10,-10,-10,-10,-10,-10,-15],
+r:[0,5,10,10,10,10,5,0,0,5,10,10,10,10,5,0,0,5,10,10,10,10,5,0,0,5,10,10,10,10,5,0,0,5,10,10,10,10,5,0,0,5,10,10,10,10,5,0,0,5,10,10,10,10,5,0,0,5,10,10,10,10,5,0],
+q:[-10,-5,-5,-5,-5,-5,-5,-10,-5,0,0,0,0,0,0,-5,-5,0,5,5,5,5,0,-5,-5,0,5,10,10,5,0,-5,-5,0,5,10,10,5,0,-5,-5,0,5,5,5,5,0,-5,-5,0,0,0,0,0,0,-5,-10,-5,-5,-5,-5,-5,-5,-10],
+k:[-50,-40,-30,-20,-20,-30,-40,-50,-40,-20,-10,0,0,-10,-20,-40,-30,-10,20,30,30,20,-10,-30,-30,-10,30,40,40,30,-10,-30,-30,-10,30,40,40,30,-10,-30,-30,-10,20,30,30,20,-10,-30,-40,-20,-10,0,0,-10,-20,-40,-50,-40,-30,-20,-20,-30,-40,-50]
+};
+/* centre squares d5 e5 d4 e4 and the extended centre ring */
+var CENTRE={}; [27,28,35,36].forEach(function(s){CENTRE[s]=1;});
+var EXTCENTRE={}; [18,19,20,21,26,29,34,37,42,43,44,45].forEach(function(s){EXTCENTRE[s]=1;});
+function cheb(a,b){var ar=a>>3,ac=a&7,br=b>>3,bc=b&7;return Math.max(Math.abs(ar-br),Math.abs(ac-bc));}
+function computePhase(st){
+  var ph=0,i,p;
+  for(i=0;i<64;i++){p=st.b[i];if(!p)continue;
+    if(p.t==='n'||p.t==='b')ph+=1;else if(p.t==='r')ph+=2;else if(p.t==='q')ph+=4;}
+  return Math.min(24,ph);
+}
+function gamePhase(st){
+  var ph=computePhase(st);
+  if(ph>=17)return 'opening';
+  if(ph<=8)return 'endgame';
+  return 'middlegame';
+}
 function opp(c){return c==='w'?'b':'w';}
 function clone(st){return {b:st.b.slice(),turn:st.turn,cast:{wK:st.cast.wK,wQ:st.cast.wQ,bK:st.cast.bK,bQ:st.cast.bQ},ep:st.ep};}
 function initialState(){
@@ -268,67 +297,371 @@ function doMove(st,m){
   st.ep=m.dbl?(m.from+m.to)/2:-1;
   st.turn=opp(p.c);
 }
+/* ---------- Strategic evaluation (white perspective, tapered) ---------- */
 function evaluate(st){
-  var s=0;
-  for(var i=0;i<64;i++){
-    var p=st.b[i];if(!p)continue;
-    var v=VAL[p.t]+PST[p.t][p.c==='w'?i:(i^56)];
-    s+=p.c==='w'?v:-v;
+  var b=st.b,i,p,r,c,idx;
+  var mgW=0,mgB=0,egW=0,egB=0,matW=0,matB=0;
+  var kingW=-1,kingB=-1,bishW=0,bishB=0,queenW=0,queenB=0;
+  var minorsTotW=0,minorsTotB=0,minorsHomeW=0,minorsHomeB=0;
+  var pawnFileW=[0,0,0,0,0,0,0,0],pawnFileB=[0,0,0,0,0,0,0,0];
+  var pawnsW=[],pawnsB=[],rooksW=[],rooksB=[],knightsW=[],knightsB=[];
+  var HOME_MINORS_W={57:1,58:1,61:1,62:1},HOME_MINORS_B={1:1,2:1,5:1,6:1};
+  for(i=0;i<64;i++){
+    p=b[i];if(!p)continue;
+    idx=p.c==='w'?i:(i^56);
+    var vm=VAL[p.t]+PST_MG[p.t][idx], ve=VAL[p.t]+PST_EG[p.t][idx];
+    var occ=0;
+    if(CENTRE[i])occ=p.t==='p'?16:10;else if(EXTCENTRE[i])occ=5;
+    if(p.c==='w'){mgW+=vm+occ;egW+=ve+occ;matW+=VAL[p.t];}else{mgB+=vm+occ;egB+=ve+occ;matB+=VAL[p.t];}
+    r=i>>3;c=i&7;
+    if(p.t==='k'){if(p.c==='w')kingW=i;else kingB=i;}
+    else if(p.t==='b'){if(p.c==='w'){bishW++;minorsTotW++;if(HOME_MINORS_W[i])minorsHomeW++;}else{bishB++;minorsTotB++;if(HOME_MINORS_B[i])minorsHomeB++;}}
+    else if(p.t==='n'){if(p.c==='w'){minorsTotW++;knightsW.push(i);if(HOME_MINORS_W[i])minorsHomeW++;}else{minorsTotB++;knightsB.push(i);if(HOME_MINORS_B[i])minorsHomeB++;}}
+    else if(p.t==='q'){if(p.c==='w')queenW++;else queenB++;}
+    else if(p.t==='p'){if(p.c==='w'){pawnFileW[c]++;pawnsW.push(i);}else{pawnFileB[c]++;pawnsB.push(i);}}
+    else if(p.t==='r'){if(p.c==='w')rooksW.push(i);else rooksB.push(i);}
   }
-  return st.turn==='w'?s:-s;
+  var phase=computePhase(st);
+  /* --- mobility + centre attacks + king-zone pressure (pseudo-legal scan) --- */
+  var mobW=0,mobB=0,ctrW=0,ctrB=0,zoneW=0,zoneB=0;
+  function addMob(color,weight,dest,enemyKing){
+    if(color==='w'){mobW+=weight;if(CENTRE[dest])ctrW+=6;if(cheb(dest,enemyKing)<=1)zoneW++;}
+    else{mobB+=weight;if(CENTRE[dest])ctrB+=6;if(cheb(dest,enemyKing)<=1)zoneB++;}
+  }
+  var NJ2=[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+  var RAYS=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  for(i=0;i<64;i++){
+    p=b[i];if(!p||p.t==='k')continue;
+    r=i>>3;c=i&7;
+    var enemyKing=p.c==='w'?kingB:kingW;
+    if(p.t==='p'){
+      var dir=p.c==='w'?-1:1,r1=r+dir;
+      if(r1>=0&&r1<8){
+        if(!b[r1*8+c]){if(p.c==='w')mobW+=2;else mobB+=2;}
+        for(var dc=-1;dc<=1;dc+=2){
+          var cc=c+dc;if(cc<0||cc>7)continue;
+          var ds=r1*8+cc;
+          if(CENTRE[ds]){if(p.c==='w')ctrW+=8;else ctrB+=8;}
+          if(cheb(ds,enemyKing)<=1){if(p.c==='w')zoneW++;else zoneB++;}
+        }
+      }
+      continue;
+    }
+    var wgt=p.t==='n'?4:p.t==='b'?4:p.t==='r'?3:2;
+    if(p.t==='n'){
+      for(var o=0;o<8;o++){var nr=r+NJ2[o][0],nc=c+NJ2[o][1];
+        if(nr<0||nr>7||nc<0||nc>7)continue;var t2=b[nr*8+nc];
+        if(!t2||t2.c!==p.c)addMob(p.c,wgt,nr*8+nc,enemyKing);}
+    }else{
+      var dirs=p.t==='r'?[0,1,2,3]:p.t==='b'?[4,5,6,7]:[0,1,2,3,4,5,6,7];
+      for(var d=0;d<dirs.length;d++){
+        var sr=r+RAYS[dirs[d]][0],sc=c+RAYS[dirs[d]][1];
+        while(sr>=0&&sr<8&&sc>=0&&sc<8){
+          var sp=b[sr*8+sc];
+          if(!sp)addMob(p.c,wgt,sr*8+sc,enemyKing);
+          else{if(sp.c!==p.c)addMob(p.c,wgt,sr*8+sc,enemyKing);break;}
+          sr+=RAYS[dirs[d]][0];sc+=RAYS[dirs[d]][1];
+        }
+      }
+    }
+  }
+  mgW+=mobW+ctrW;mgB+=mobB+ctrB;egW+=mobW+ctrW;egB+=mobB+ctrB;
+  /* king-zone attack pressure (middlegame only) */
+  mgW+=zoneW*zoneW*3;mgB+=zoneB*zoneB*3;
+  /* --- bishop pair --- */
+  if(bishW>=2){mgW+=28;egW+=40;}
+  if(bishB>=2){mgB+=28;egB+=40;}
+  /* --- pawn structure --- */
+  var passedW=[],passedB=[];
+  function pawnStruct(pawns,enemyPawns,ownFile,enemyFile,ownKing,enemyKing,isWhite,acc){
+    var j,sq,rr,cc2;
+    for(var f=0;f<8;f++)if(ownFile[f]>1){acc.mg-=(ownFile[f]-1)*12;acc.eg-=(ownFile[f]-1)*14;}
+    for(j=0;j<pawns.length;j++){
+      sq=pawns[j];rr=sq>>3;cc2=sq&7;
+      var isolated=(cc2===0||ownFile[cc2-1]===0)&&(cc2===7||ownFile[cc2+1]===0);
+      if(isolated){acc.mg-=14;acc.eg-=18;}
+      var passed=true;
+      for(var e=0;e<enemyPawns.length;e++){
+        var er=enemyPawns[e]>>3,ec=enemyPawns[e]&7;
+        if(Math.abs(ec-cc2)<=1&&(isWhite?er<rr:er>rr)){passed=false;break;}
+      }
+      /* supported / connected */
+      var supRow=isWhite?rr+1:rr-1,sup=false,adj=false;
+      for(var s2=0;s2<pawns.length;s2++){
+        if(s2===j)continue;var sr2=pawns[s2]>>3,sc2=pawns[s2]&7;
+        if(sr2===supRow&&Math.abs(sc2-cc2)===1)sup=true;
+        if(sr2===rr&&Math.abs(sc2-cc2)===1)adj=true;
+      }
+      if(sup){acc.mg+=8;acc.eg+=10;}
+      if(adj){acc.mg+=5;acc.eg+=6;}
+      if(passed){
+        var prog=isWhite?6-rr:rr-1;if(prog<0)prog=0;
+        acc.mg+=12+prog*6;
+        acc.eg+=22+prog*16;
+        /* own king shepherds the passer home in the endgame */
+        acc.eg+=Math.max(0,6-cheb(ownKing,sq))*4;
+        if(isWhite)passedW.push(sq);else passedB.push(sq);
+      }
+    }
+  }
+  var accW={mg:0,eg:0},accB={mg:0,eg:0};
+  pawnStruct(pawnsW,pawnsB,pawnFileW,pawnFileB,kingW,kingB,true,accW);
+  pawnStruct(pawnsB,pawnsW,pawnFileB,pawnFileW,kingB,kingW,false,accB);
+  mgW+=accW.mg;egW+=accW.eg;mgB+=accB.mg;egB+=accB.eg;
+  /* --- rooks: open/semi-open files, 7th rank, behind passed pawns --- */
+  function rookBonus(rooks,ownFile,enemyFile,isWhite,acc){
+    for(var j=0;j<rooks.length;j++){
+      var sq=rooks[j],rr=sq>>3,cc2=sq&7;
+      if(ownFile[cc2]===0&&enemyFile[cc2]===0){acc.mg+=24;acc.eg+=24;}
+      else if(ownFile[cc2]===0){acc.mg+=12;acc.eg+=12;}
+      if(isWhite?rr===1:rr===6){acc.mg+=22;acc.eg+=18;}
+      var passed=isWhite?passedW:passedB;
+      for(var q=0;q<passed.length;q++){
+        if((passed[q]&7)===cc2&&(isWhite?rr>(passed[q]>>3):rr<(passed[q]>>3)))acc.eg+=14;
+      }
+    }
+  }
+  var accRW={mg:0,eg:0},accRB={mg:0,eg:0};
+  rookBonus(rooksW,pawnFileW,pawnFileB,true,accRW);
+  rookBonus(rooksB,pawnFileB,pawnFileW,false,accRB);
+  mgW+=accRW.mg;egW+=accRW.eg;mgB+=accRB.mg;egB+=accRB.eg;
+  /* --- knight outposts: supported, in enemy half, no enemy pawn can chase --- */
+  function outposts(knights,ownPawns,enemyPawns,isWhite,acc){
+    for(var j=0;j<knights.length;j++){
+      var sq=knights[j],rr=sq>>3,cc2=sq&7;
+      if(isWhite?rr>3:rr<4)continue;
+      if(cc2<1||cc2>6)continue;
+      var supRow=isWhite?rr+1:rr-1,sup=false;
+      for(var s2=0;s2<ownPawns.length;s2++){var sr2=ownPawns[s2]>>3,sc2=ownPawns[s2]&7;
+        if(sr2===supRow&&Math.abs(sc2-cc2)===1){sup=true;break;}}
+      if(!sup)continue;
+      var atkRow=isWhite?rr-1:rr+1,chased=false;
+      for(var e=0;e<enemyPawns.length;e++){var er=enemyPawns[e]>>3,ec=enemyPawns[e]&7;
+        if(er===atkRow&&Math.abs(ec-cc2)===1){chased=true;break;}}
+      if(!chased){acc.mg+=24;acc.eg+=18;}
+    }
+  }
+  var accNW={mg:0,eg:0},accNB={mg:0,eg:0};
+  outposts(knightsW,pawnsW,pawnsB,true,accNW);
+  outposts(knightsB,pawnsB,pawnsW,false,accNB);
+  mgW+=accNW.mg;egW+=accNW.eg;mgB+=accNB.mg;egB+=accNB.eg;
+  /* --- king safety (middlegame-weighted; tapered out in the endgame) --- */
+  function kingSafety(ksq,ownPawns,isWhite,enemyHasQueen,acc){
+    if(ksq<0)return;
+    var kr=ksq>>3,kc=ksq&7;
+    var castled=(isWhite&&(ksq===62||ksq===58))||(!isWhite&&(ksq===6||ksq===2));
+    if(castled)acc.mg+=26;
+    var shieldRow=isWhite?kr-1:kr+1,shield=0;
+    if(shieldRow>=0&&shieldRow<8){
+      for(var dc=-1;dc<=1;dc++){
+        var cc2=kc+dc;if(cc2<0||cc2>7)continue;
+        var pp=b[shieldRow*8+cc2];
+        if(pp&&pp.t==='p'&&(isWhite?pp.c==='w':pp.c==='b'))shield++;
+      }
+    }
+    acc.mg+=shield*13;
+    var sev=enemyHasQueen?1:0.5;
+    if(!castled){
+      if((isWhite&&ksq===60)||(!isWhite&&ksq===4))acc.mg-=Math.round(32*sev); /* king stuck in the centre */
+      else if(kc>=2&&kc<=5)acc.mg-=Math.round(12*sev);
+    }
+    /* open / semi-open file next to the king */
+    var ownOnFile=false,anyOnFile=false;
+    for(var rr2=0;rr2<8;rr2++){var fp=b[rr2*8+kc];
+      if(fp&&fp.t==='p'){anyOnFile=true;if((fp.c==='w')===isWhite)ownOnFile=true;}}
+    if(!ownOnFile)acc.mg-=Math.round(14*sev);
+    if(!anyOnFile)acc.mg-=Math.round(10*sev);
+  }
+  var accKW={mg:0,eg:0},accKB={mg:0,eg:0};
+  kingSafety(kingW,pawnsW,true,queenB>0,accKW);
+  kingSafety(kingB,pawnsB,false,queenW>0,accKB);
+  mgW+=accKW.mg;mgB+=accKB.mg;
+  /* --- development & tempo in the opening --- */
+  if(phase>=16){
+    mgW+=(minorsTotW-minorsHomeW)*10;
+    mgB+=(minorsTotB-minorsHomeB)*10;
+    var qw=b[59],qb=b[3];
+    if(queenW>0&&!(qw&&qw.t==='q'&&qw.c==='w')&&(minorsTotW-minorsHomeW)<2)mgW-=24; /* queen out too early */
+    if(queenB>0&&!(qb&&qb.t==='q'&&qb.c==='b')&&(minorsTotB-minorsHomeB)<2)mgB-=24;
+  }
+  /* --- tapered blend --- */
+  var scoreW=(mgW*phase+egW*(24-phase))/24;
+  var scoreB=(mgB*phase+egB*(24-phase))/24;
+  var score=scoreW-scoreB;
+  /* --- mop-up: in a won endgame drive the enemy king to the edge --- */
+  if(phase<=8&&kingW>=0&&kingB>=0){
+    var net=matW-matB;
+    if(Math.abs(net)>150){
+      var loserKing=net>0?kingB:kingW,winnerKing=net>0?kingW:kingB,sign=net>0?1:-1;
+      var lr=loserKing>>3,lc=loserKing&7;
+      var edge=Math.max(Math.abs(lr-3.5),Math.abs(lc-3.5));
+      score+=sign*(edge*12+(7-cheb(winnerKing,loserKing))*6);
+    }
+  }
+  var stm=st.turn==='w'?score:-score;
+  return stm+8; /* tempo: side to move bonus */
 }
-var nodes=0,NODE_CAP=250000;
-function orderMoves(st,moves){
+/* ---------- Search: alpha-beta + quiescence, MVV-LVA / killer / history ---------- */
+var nodes=0,NODE_CAP=300000,searchAborted=false,searchDeadline=0;
+var killers=[],historyT={};
+function orderMoves(st,moves,ply){
+  var kl=killers[ply]||[];
   for(var i=0;i<moves.length;i++){
     var m=moves[i],s=0;
-    if(m.cap)s=10*VAL[m.cap.t]-VAL[st.b[m.from].t]/10;
-    if(m.promo)s+=900;
+    if(m.cap)s=2000000+10*VAL[m.cap.t]-VAL[st.b[m.from].t]+(m.promo?VAL[m.promo]:0);
+    else if(m.promo)s=1900000+VAL[m.promo];
+    else if(kl.length&&(m.from===kl[0].from&&m.to===kl[0].to))s=1000000;
+    else if(kl.length>1&&(m.from===kl[1].from&&m.to===kl[1].to))s=900000;
+    else{
+      s=historyT[m.from*64+m.to]||0;if(s>800000)s=800000;
+      var pt=st.b[m.from].t,idxW=st.b[m.from].c==='w';
+      s+=(PST_MG[pt][idxW?m.to:(m.to^56)]-PST_MG[pt][idxW?m.from:(m.from^56)])>>2;
+    }
     m._s=s;
   }
   moves.sort(function(a,b2){return b2._s-a._s;});
 }
-function quiesce(st,alpha,beta,qd){
-  if(++nodes>NODE_CAP)return alpha;
+function timeUp(){
+  if((nodes&255)===0&&Date.now()>searchDeadline){searchAborted=true;return true;}
+  return searchAborted;
+}
+function quiesce(st,alpha,beta,qd,ply){
+  if(++nodes>NODE_CAP)searchAborted=true;
+  if(searchAborted||timeUp())return alpha;
   var stand=evaluate(st);
   if(stand>=beta)return beta;
   if(stand>alpha)alpha=stand;
   if(qd<=0)return alpha;
-  var moves=genMoves(st,true);
-  if(inCheck(st,st.turn))moves=genMoves(st,false);
-  orderMoves(st,moves);
+  var inChk=inCheck(st,st.turn);
+  var moves;
+  if(inChk)moves=genMoves(st,false);
+  else{
+    moves=genMoves(st,true);
+    /* also search quiet promotions — they are tactical */
+    var full=genMoves(st,false);
+    for(var f=0;f<full.length;f++)if(full[f].promo&&!full[f].cap)moves.push(full[f]);
+  }
+  orderMoves(st,moves,ply);
   for(var i=0;i<moves.length;i++){
     var nst=clone(st);doMove(nst,moves[i]);
-    var s=-quiesce(nst,-beta,-alpha,qd-1);
+    var s=-quiesce(nst,-beta,-alpha,qd-1,ply+1);
+    if(searchAborted)return alpha;
     if(s>=beta)return beta;
     if(s>alpha)alpha=s;
   }
   return alpha;
 }
-function negamax(st,depth,alpha,beta){
-  if(++nodes>NODE_CAP)return alpha;
+function negamax(st,depth,alpha,beta,ply){
+  if(++nodes>NODE_CAP)searchAborted=true;
+  if(searchAborted||timeUp())return alpha;
   var moves=genMoves(st,false);
   if(moves.length===0)return inCheck(st,st.turn)?-100000-depth:0;
-  if(depth<=0)return quiesce(st,alpha,beta,4);
-  orderMoves(st,moves);
+  if(depth<=0)return quiesce(st,alpha,beta,4,ply);
+  orderMoves(st,moves,ply);
   for(var i=0;i<moves.length;i++){
-    var nst=clone(st);doMove(nst,moves[i]);
-    var s=-negamax(nst,depth-1,-beta,-alpha);
+    var m=moves[i];
+    var nst=clone(st);doMove(nst,m);
+    var s=-negamax(nst,depth-1,-beta,-alpha,ply+1);
+    if(searchAborted)return alpha;
     if(s>alpha)alpha=s;
-    if(alpha>=beta)break;
+    if(alpha>=beta){
+      if(!m.cap&&!m.promo){
+        var kl=killers[ply]||(killers[ply]=[]);
+        if(!kl.length||kl[0].from!==m.from||kl[0].to!==m.to){kl.unshift({from:m.from,to:m.to});if(kl.length>2)kl.pop();}
+        var hk=m.from*64+m.to;
+        historyT[hk]=(historyT[hk]||0)+depth*depth;
+      }
+      break;
+    }
   }
   return alpha;
 }
+/* ---------- Opening book: a small principled repertoire ----------
+   Built by replaying sound lines from the start position:
+   as White the Italian Game (1.e4 e5 2.Nf3 Nc6 3.Bc4 Bc5 4.O-O Nf6 5.d3),
+   against 1.d4 a Queen's Gambit setup (d5, e6, Nf6, c4/d4 structure).
+   First move recorded for a position wins, so the book stays coherent. */
+var BOOK=null;
+function boardKey(st){
+  var s=st.turn;
+  for(var i=0;i<64;i++){var p=st.b[i];s+=p?p.c+p.t:'..';}
+  s+=st.cast.wK?'K':'';s+=st.cast.wQ?'Q':'';s+=st.cast.bK?'k':'';s+=st.cast.bQ?'q':'';
+  return s;
+}
+function buildBook(){
+  if(BOOK)return BOOK;
+  BOOK={};
+  var LINES=[
+    [[52,36],[12,28],[62,45],[1,18],[61,34],[5,26],[60,62],[6,21],[51,43]],
+    [[51,35],[11,27],[50,34],[12,20],[57,42],[6,21],[52,36]]
+  ];
+  for(var L=0;L<LINES.length;L++){
+    var st=initialState();
+    for(var j=0;j<LINES[L].length;j++){
+      var key=boardKey(st),mv=LINES[L][j],found=null;
+      var legal=genMoves(st,false);
+      for(var q=0;q<legal.length;q++)if(legal[q].from===mv[0]&&legal[q].to===mv[1]&&!legal[q].promo){found=legal[q];break;}
+      if(!found)break;
+      if(!BOOK[key])BOOK[key]=[mv[0],mv[1]];
+      doMove(st,found);
+    }
+  }
+  return BOOK;
+}
+/* ---------- Opening principles layer (root moves, opening only) ---------- */
+function openingRootBonus(st,m){
+  var phase=computePhase(st);
+  var piece=st.b[m.from];
+  if(!piece)return 0;
+  var bonus=0;
+  if(m.castle)return phase>=10?60:20;
+  if(phase<14)return 0;
+  var isW=piece.c==='w';
+  var homeMinors=isW?[57,58,61,62]:[1,2,5,6];
+  var undeveloped=0;
+  for(var h=0;h<4;h++){var hp=st.b[homeMinors[h]];if(hp&&hp.c===piece.c&&(hp.t==='n'||hp.t==='b'))undeveloped++;}
+  var fc=m.from&7,tc=m.to&7;
+  if(piece.t==='p'){
+    if(CENTRE[m.to])bonus+=45;
+    else if(EXTCENTRE[m.to])bonus+=14;
+    if(m.dbl&&(tc===3||tc===4))bonus+=12;
+    if((fc===0||fc===7)&&!m.cap)bonus-=35; /* edge pawn push */
+  }else if(piece.t==='n'||piece.t==='b'){
+    if(homeMinors.indexOf(m.from)>=0)bonus+=40; /* develop! */
+    else if(undeveloped>0)bonus-=18; /* don't move the same piece twice */
+    if(CENTRE[m.to])bonus+=12;else if(EXTCENTRE[m.to])bonus+=6;
+  }else if(piece.t==='q'){
+    if(!m.cap&&undeveloped>=2)bonus-=45; /* no early queen excursions */
+  }else if(piece.t==='k'){
+    bonus-=30; /* king stays home until castled */
+  }else if(piece.t==='r'){
+    if(undeveloped>=2&&!m.cap)bonus-=16;
+  }
+  return bonus;
+}
 function aiBestMove(st,depth,randomness){
-  nodes=0;
+  nodes=0;searchAborted=false;killers=[];historyT={};
+  searchDeadline=Date.now()+(depth>=4?2100:depth===3?1200:600);
   var moves=genMoves(st,false);
-  orderMoves(st,moves);
-  var best=moves[0],bestS=-Infinity,alpha=-Infinity;
+  if(moves.length===0)return null;
+  if(moves.length===1)return moves[0];
+  /* opening book (Easy sometimes improvises, keeping its blunder character) */
+  if(depth>=2||Math.random()<0.5){
+    var book=buildBook();
+    var bm=book[boardKey(st)];
+    if(bm&&computePhase(st)>=16){
+      for(var bi=0;bi<moves.length;bi++)if(moves[bi].from===bm[0]&&moves[bi].to===bm[1]&&!moves[bi].promo)return moves[bi];
+    }
+  }
+  orderMoves(st,moves,0);
+  var best=moves[0],bestAdj=-Infinity,alpha=-Infinity;
   for(var i=0;i<moves.length;i++){
     var nst=clone(st);doMove(nst,moves[i]);
-    var s=-negamax(nst,depth-1,-Infinity,-alpha);
-    s+=Math.random()*randomness;
-    if(s>bestS){bestS=s;best=moves[i];}
+    var s=-negamax(nst,depth-1,-Infinity,-alpha,1);
+    if(searchAborted&&i>0)break;
     if(s>alpha)alpha=s;
+    var adj=s+openingRootBonus(st,moves[i])+(randomness?Math.random()*randomness:0);
+    if(adj>bestAdj){bestAdj=adj;best=moves[i];}
   }
   return best;
 }
@@ -362,7 +695,7 @@ try{
   soundOn=localStorage.getItem('chessSound')!=='off';
   difficulty=localStorage.getItem('chessDiff')||'normal';
 }catch(e){}
-var DIFFS={easy:{label:'EASY',depth:1,rand:70},normal:{label:'NORMAL',depth:2,rand:12},hard:{label:'HARD',depth:3,rand:4}};
+var DIFFS={easy:{label:'EASY',depth:1,rand:70},normal:{label:'NORMAL',depth:3,rand:8},hard:{label:'HARD',depth:4,rand:0}};
 function refreshOptionsUI(){
   document.getElementById('btnSound').innerHTML=(soundOn?'&#128266;':'&#128263;')+'&nbsp;&nbsp;SOUND: '+(soundOn?'ON':'OFF');
   document.getElementById('btnDiff').innerHTML='&#129302;&nbsp;&nbsp;AI LEVEL: '+DIFFS[difficulty].label;
