@@ -104,6 +104,20 @@
     background:rgba(255,255,255,.06); border:2px solid #888; border-radius:10px; cursor:pointer; font-family:inherit; }
   .ctlBtn:active { transform:scale(.95); }
   body.lightbg .ctlBtn { color:#221c11; border-color:#8a7a5a; background:rgba(60,45,20,.08); }
+  /* ===== GAME REVIEW (2026-10-24) ===== */
+  #reviewBar { background:rgba(0,0,0,.35); border:2px solid #888; border-radius:12px; margin:0 12px 10px; padding:10px; color:#fff; }
+  body.lightbg #reviewBar { color:#221c11; border-color:#8a7a5a; background:rgba(60,45,20,.08); }
+  #reviewTitle { font-weight:900; letter-spacing:2px; font-size:15px; margin-bottom:6px; }
+  #reviewSummary { font-size:13px; opacity:.9; margin-bottom:8px; line-height:1.4; }
+  #reviewMoves { display:flex; flex-wrap:wrap; gap:6px; max-height:140px; overflow-y:auto; margin-bottom:8px; }
+  .rvMove { padding:6px 8px; font-size:12px; font-weight:700; border:2px solid #888; border-radius:8px; background:rgba(255,255,255,.06); color:inherit; cursor:pointer; font-family:inherit; }
+  .rvMove.active { border-color:#ffd700; background:rgba(255,215,0,.18); }
+  .rvMove .rvBadge { margin-left:4px; font-weight:900; }
+  #reviewCtl { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; }
+  .rvBtn { flex:1 1 30%; padding:10px 2px; font-size:12px; font-weight:800; border:2px solid #888; border-radius:10px; background:rgba(255,255,255,.06); color:inherit; cursor:pointer; font-family:inherit; }
+  .rvBtn:active { transform:scale(.95); }
+  #reviewStatus { font-size:13px; opacity:.9; line-height:1.4; }
+  #reviewNote { font-size:12px; opacity:.7; margin-top:6px; line-height:1.4; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -125,6 +139,23 @@
   <button id="btnCtlHint" class="ctlBtn">&#128161;&nbsp;HINT</button>
   <button id="btnCtlFlip" class="ctlBtn">&#8645;&nbsp;FLIP</button>
   <button id="btnCtlResign" class="ctlBtn">&#9873;&nbsp;RESIGN</button>
+</div>
+
+<div id="reviewBar" class="hidden">
+  <div id="reviewTitle">GAME REVIEW</div>
+  <div id="reviewSummary"></div>
+  <div id="reviewMoves"></div>
+  <div id="reviewCtl">
+    <button id="btnRvFirst" class="rvBtn">&#9198;&nbsp;FIRST</button>
+    <button id="btnRvPrev" class="rvBtn">&#9664;&nbsp;BACK</button>
+    <button id="btnRvNext" class="rvBtn">NEXT&nbsp;&#9654;</button>
+    <button id="btnRvLast" class="rvBtn">LAST&nbsp;&#9197;</button>
+    <button id="btnRvBest" class="rvBtn">&#128161;&nbsp;BEST CHAAL</button>
+    <button id="btnRvBackToReal" class="rvBtn">&#8630;&nbsp;ASLI LINE</button>
+    <button id="btnRvExit" class="rvBtn">&#10005;&nbsp;EXIT REVIEW</button>
+  </div>
+  <div id="reviewStatus"></div>
+  <div id="reviewNote">Try Move: board par koi bhi legal chaal chal kar test karo (click ya drag, dono chalenge). Back / Forward / kisi chaal par click karte hi tum asli game line par wapas aa jaoge. Review me clock band hai aur AI apni chaal nahi chalega.</div>
 </div>
 
 <div id="menu" class="panel">
@@ -187,7 +218,9 @@
 <div id="gameover" class="panel hidden">
   <h1 id="winTitle">CHECKMATE</h1>
   <p id="winSub"></p>
+  <p id="gameOverReviewNote" style="font-size:13px;opacity:.85;">GAME REVIEW me har chaal ki rating, accuracy aur Try Move milega.</p>
   <button id="btnAgain" class="btn primary">&#8635;&nbsp;&nbsp;PLAY AGAIN</button>
+  <button id="btnReview" class="btn">&#128200;&nbsp;&nbsp;GAME REVIEW</button>
   <button id="btnView" class="btn">&#128065;&nbsp;&nbsp;VIEW BOARD</button>
   <button id="btnHub" class="btn">&#127968;&nbsp;&nbsp;GAMES MENU</button>
 </div>
@@ -1206,6 +1239,11 @@ var selected=-1,selMoves=[],lastMove=null,checkSq=-1,phase='menu';
 var pendingPromo=null;
 var animMove=null,animStart=0,drag=null;
 var moveHist=[],captured=[],undoStack=[];
+/* GAME REVIEW (2026-10-24): a full record of the game just played, so the
+   review can replay exact positions (before-state per move) instead of
+   trusting the undo stack, whose snapshot move-lists lag by one move. */
+var gameMoves=[];
+var finalState=null,finalCaptured=[],finalMoveHist=[],finalLastMove=null,finalCheckSq=-1,gameEndKind=null,gameEndWinner=null;
 /* MATEFIX-3D v3 clocks — FRIENDLY MODE ONLY. AI mode never sets
    friendlyTime into a clock (see renderPlayers/newGame guards). */
 var friendlyTime=0; /* minutes; 0 = no clock */
@@ -1236,6 +1274,8 @@ function moveNotation(m,before){
 function recordMove(m){
   moveHist.push(moveNotation(m,st));
   if(m.cap)captured.push({piece:m.cap,by:st.turn});
+  var pc0=st.b[m.from];
+  gameMoves.push({san:moveNotation(m,st),from:m.from,to:m.to,cap:m.cap||null,epCap:(m.epCap!=null?m.epCap:null),dbl:!!m.dbl,promo:m.promo||null,castle:m.castle||null,color:st.turn,piece:pc0?{t:pc0.t,c:pc0.c}:null,before:clone(st)});
 }
 function pushUndo(){undoStack.push({st:clone(st),last:lastMove,check:checkSq,moves:moveHist.slice(),caps:captured.slice(),clock:{w:clockMs.w,b:clockMs.b}});}
 function renderPlayers(){
@@ -1283,8 +1323,15 @@ function doUndo(){
   if(!n)return;
   var snap=null;
   for(var k=0;k<n;k++)snap=undoStack.pop();
-  st=snap.st;lastMove=snap.last;checkSq=snap.check;moveHist=snap.moves;captured=snap.caps;
+  st=snap.st;lastMove=snap.last;checkSq=snap.check;
   if(snap.clock)clockMs={w:snap.clock.w,b:snap.clock.b};clockLast=performance.now();
+  /* Rebuild the history from gameMoves, not from the snapshot: the snapshot
+     move-list was taken after recordMove, so it lags one move behind the
+     board it restores. gameMoves is trimmed by the exact number undone. */
+  gameMoves.length=Math.max(0,gameMoves.length-n);
+  moveHist=gameMoves.map(function(g){return g.san;});
+  captured=[];
+  gameMoves.forEach(function(g){if(g.cap)captured.push({piece:g.cap,by:g.color});});
   selected=-1;selMoves=[];pendingPromo=null;animMove=null;drag=null;
   syncTop();renderMoves();draw();
 }
@@ -1306,6 +1353,10 @@ function newGame(){
   st=initialState();
   selected=-1;selMoves=[];lastMove=null;checkSq=-1;pendingPromo=null;
   moveHist=[];captured=[];undoStack=[];animMove=null;drag=null;
+  gameMoves=[];finalState=null;finalCaptured=[];finalMoveHist=[];finalLastMove=null;finalCheckSq=-1;
+  reviewActive=false;reviewIdx=0;reviewExploring=false;reviewExploreStack=[];reviewExploreState=null;reviewTryNote='';
+  reviewData={moves:[],positions:[],ratings:[],classifying:false,classified:0};
+  var _rb=document.getElementById('reviewBar');if(_rb)_rb.classList.add('hidden');
   flipped=(mode==='ai'&&humanColor==='b');
   /* Friendly clocks only: AI mode always starts with no clock. */
   clockMs={w:friendlyTime*60000,b:friendlyTime*60000};
@@ -1318,6 +1369,9 @@ function newGame(){
   maybeAi();
 }
 function isHumanTurn(){return mode==='2p'||st.turn===humanColor;}
+/* REVIEW-CLICKFIX: input is allowed in play (own turn) AND in review (the
+   side to move in the reviewed position). */
+function canInput(){return (phase==='play'&&isHumanTurn())||phase==='review';}
 function colorName(c){return c==='w'?'White':'Black';}
 function syncTop(){
   turnDot.style.background=st.turn==='w'?'#f5f5f5':'#222';
@@ -1358,6 +1412,7 @@ function afterMove(m){
   maybeAi();
 }
 function applyHumanMove(m){
+  if(phase==='review'){applyReviewMove(m);return;}
   recordMove(m);pushUndo();
   if(m.cap)sfx.capture();else sfx.move();
   if(m.promo)sfx.promote();
@@ -1385,6 +1440,8 @@ function maybeAi(){
 }
 function gameOver(kind,winner){
   phase='over';
+  finalState=clone(st);finalCaptured=captured.slice();finalMoveHist=moveHist.slice();finalLastMove=lastMove;finalCheckSq=checkSq;gameEndKind=kind;gameEndWinner=winner;
+  var _note=document.getElementById('gameOverReviewNote');if(_note)_note.textContent='GAME REVIEW me har chaal ki rating, accuracy aur Try Move milega.';
   renderPlayers();
   var t=document.getElementById('winTitle'),s=document.getElementById('winSub');
   if(kind==='checkmate'){
@@ -1411,6 +1468,239 @@ function gameOver(kind,winner){
   }
   draw();
   setTimeout(function(){showPanel('gameover');},600);
+}
+
+
+/* ================= GAME REVIEW (2026-10-24) =================
+   Move rating: every move is compared with the engine's best move at
+   depth 3 (same search as Normal AI). Labels are Chess.com-style, but
+   computed by THIS engine, so they are an approximation, not an official
+   Chess.com review:
+     Brilliant = best move + a real sacrifice (the moved piece is left
+       en prise and the opponent can win material by taking it)
+     Great     = best move, and the second-best move is >=100cp worse
+       (the only good move), or a mating move
+     Miss      = a mate / a clearly winning move (>=600cp) was available
+       and the played move keeps <200cp
+     Excellent / Good / Inaccuracy / Mistake / Blunder = by centipawn
+       loss vs the best move (<=25 / <=70 / <=150 / <=300 / >300)
+   Accuracy is the mean of per-label points (Brilliant 100 ... Blunder
+   25), shown with a ~ so it is never mistaken for an official score.
+   Classification runs one move at a time in the background (setTimeout
+   chunks) so the board stays responsive; already-rated moves are
+   clickable while later moves are still being rated. */
+var reviewActive=false,reviewIdx=0,reviewExploring=false,reviewExploreBase=0,reviewExploreStack=[],reviewExploreState=null,reviewTryNote='';
+var reviewData={moves:[],positions:[],ratings:[],classifying:false,classified:0};
+var ACC_POINTS={Brilliant:100,Great:98,Excellent:95,Good:88,Inaccuracy:75,Mistake:55,Blunder:25,Miss:40};
+function clampScore(s){if(s>90000)return 10000;if(s<-90000)return -10000;return s;}
+function sameMove(a,b){return a&&b&&a.from===b.from&&a.to===b.to&&(a.promo||null)===(b.promo||null);}
+function badgeColor(l){return {Brilliant:'#00c2a8',Great:'#4caf50',Excellent:'#8bc34a',Good:'#9e9e9e',Inaccuracy:'#ffca28',Mistake:'#ff9800',Blunder:'#f44336',Miss:'#ab47bc'}[l]||'#9e9e9e';}
+function badgeSymbol(l){return {Brilliant:'!!',Great:'!',Excellent:'★',Good:'✓',Inaccuracy:'?!',Mistake:'?',Blunder:'??',Miss:'✗'}[l]||'';}
+function isSacrifice(before,gm,after){
+  var pc=before.b[gm.from];if(!pc)return false;
+  if(!isAttacked(after.b,gm.to,opp(pc.c)))return false;
+  return seeCapture(after.b,gm.to,opp(pc.c))>0;
+}
+function searchRootScores(before,depth,timeMs){
+  nodes=0;searchAborted=false;killers=[];historyT={};
+  searchDeadline=Date.now()+timeMs;
+  var moves=genMoves(before,false);
+  if(!moves.length)return null;
+  orderMoves(before,moves,0);
+  var scored=null;
+  for(var d=1;d<=depth;d++){
+    var cur=[],alpha=-Infinity,aborted=false;
+    for(var i=0;i<moves.length;i++){
+      var nst=clone(before);doMove(nst,moves[i]);
+      var sc=-negamax(nst,d-1,-Infinity,-alpha,1,0);
+      if(searchAborted){aborted=true;break;}
+      if(sc>alpha)alpha=sc;
+      cur.push({m:moves[i],s:sc});
+    }
+    if(cur.length===moves.length){
+      scored=cur;
+      moves=cur.slice().sort(function(a,b2){return b2.s-a.s;}).map(function(o){return o.m;});
+    }
+    if(aborted)break;
+  }
+  if(!scored)scored=moves.map(function(m){return {m:m,s:0};});
+  scored.sort(function(a,b2){return b2.s-a.s;});
+  return scored;
+}
+function classifyOne(i){
+  var gm=reviewData.moves[i],before=reviewData.positions[i],after=reviewData.positions[i+1];
+  var bestInfo=searchRootScores(before,3,500);
+  if(!bestInfo)return {label:'Good',symbol:'✓',loss:0,bestSan:gm.san,playedSan:gm.san,color:gm.color};
+  var best=bestInfo[0],bestScore=clampScore(best.s);
+  var secondScore=bestInfo.length>1?clampScore(bestInfo[1].s):null;
+  var playedIsBest=sameMove(best.m,gm);
+  var afterMoves=genMoves(after,false);
+  var playedMate=(afterMoves.length===0&&inCheck(after,after.turn));
+  var playedScore;
+  if(playedMate)playedScore=10000;
+  else if(afterMoves.length===0)playedScore=0;
+  else if(playedIsBest)playedScore=bestScore;
+  else{var oppInfo=searchRootScores(after,3,500);playedScore=oppInfo?-clampScore(oppInfo[0].s):0;}
+  var loss=bestScore-playedScore;
+  var sac=isSacrifice(before,gm,after);
+  var label;
+  if(playedMate)label=sac?'Brilliant':'Great';
+  else if(bestScore>=10000)label='Miss';
+  else if(bestScore>=600&&playedScore<200&&loss>=400)label='Miss';
+  else if(playedIsBest&&sac)label='Brilliant';
+  else if(playedIsBest&&secondScore!==null&&bestScore-secondScore>=100)label='Great';
+  else if(loss<=25)label='Excellent';
+  else if(loss<=70)label='Good';
+  else if(loss<=150)label='Inaccuracy';
+  else if(loss<=300)label='Mistake';
+  else label='Blunder';
+  /* Opening book moves are sound by construction for this exact position
+     (buildBook only stores legal moves from its sound lines), so a book
+     move is never an Inaccuracy / Mistake / Blunder / Miss in this engine's
+     own repertoire — depth-3 search noise in the opening must not demote
+     e4, e5, Nf3, Nc6, Bc4 etc. to Inaccuracy. */
+  try{
+    var bk=buildBook()[boardKey(before)];
+    if(bk&&bk[0]===gm.from&&bk[1]===gm.to&&!gm.promo&&(label==='Good'||label==='Inaccuracy'||label==='Mistake'||label==='Blunder'||label==='Miss'))label='Excellent';
+  }catch(e){}
+  return {label:label,symbol:badgeSymbol(label),loss:loss,bestSan:moveNotation(best.m,before),playedSan:gm.san,color:gm.color};
+}
+function startClassification(){
+  if(reviewData.classifying||reviewData.classified>=reviewData.moves.length)return;
+  reviewData.classifying=true;
+  var idx=reviewData.classified;
+  function step(){
+    if(idx>=reviewData.moves.length){reviewData.classifying=false;if(reviewActive){renderReviewSummary();renderReviewList();}return;}
+    try{reviewData.ratings[idx]=classifyOne(idx);}
+    catch(e){reviewData.ratings[idx]={label:'Good',symbol:'✓',loss:0,bestSan:reviewData.moves[idx].san,playedSan:reviewData.moves[idx].san,color:reviewData.moves[idx].color};}
+    reviewData.classified=idx+1;idx++;
+    if(reviewActive){renderReviewSummary();renderReviewList();}
+    setTimeout(step,10);
+  }
+  step();
+}
+function renderReviewSummary(){
+  var el=document.getElementById('reviewSummary');if(!el)return;
+  if(!reviewData.moves.length){el.textContent='Koi game record nahi mili.';return;}
+  if(reviewData.classifying){el.textContent='Rating ban rahi hai: '+reviewData.classified+' / '+reviewData.moves.length+' chaalein… Tum pehle se rated chaalon par click karke dekh sakte ho.';return;}
+  if(reviewData.classified<reviewData.moves.length){el.textContent='Rating: '+reviewData.classified+' / '+reviewData.moves.length+' (jaari hai…)';return;}
+  var counts={},acc={w:{sum:0,n:0},b:{sum:0,n:0}};
+  reviewData.ratings.forEach(function(r){counts[r.label]=(counts[r.label]||0)+1;var pts=ACC_POINTS[r.label]||80;acc[r.color].sum+=pts;acc[r.color].n++;});
+  var aw=acc.w.n?Math.round(acc.w.sum/acc.w.n):0,ab=acc.b.n?Math.round(acc.b.sum/acc.b.n):0;
+  var parts=[];['Brilliant','Great','Excellent','Good','Inaccuracy','Mistake','Blunder','Miss'].forEach(function(l){if(counts[l])parts.push(l+' '+counts[l]);});
+  el.textContent='White accuracy ~'+aw+'% • Black accuracy ~'+ab+'%  |  '+parts.join(' • ');
+}
+function renderReviewList(){
+  var el=document.getElementById('reviewMoves');if(!el)return;
+  var scrollTop=el.scrollTop,h='';
+  for(var i=0;i<reviewData.moves.length;i++){
+    var r=reviewData.ratings[i];
+    var badge=r?'<span class="rvBadge" style="color:'+badgeColor(r.label)+'">'+r.symbol+'</span>':'<span class="rvBadge">…</span>';
+    var active=(i+1===reviewIdx&&!reviewExploring)?' active':'';
+    h+='<button class="rvMove'+active+'" data-i="'+i+'">'+(i%2===0?((i/2+1)+'. '):'')+reviewData.moves[i].san+badge+'</button>';
+  }
+  el.innerHTML=h;el.scrollTop=scrollTop;
+  var btns=el.querySelectorAll('.rvMove');
+  for(var b=0;b<btns.length;b++){(function(btn){btn.addEventListener('click',function(){gotoReviewIdx(parseInt(btn.getAttribute('data-i'),10)+1);});})(btns[b]);}
+}
+function evalText(s){
+  var mv=genMoves(s,false);
+  if(!mv.length)return inCheck(s,s.turn)?'Checkmate':'Draw';
+  var sc=evaluate(s),white=s.turn==='w'?sc:-sc;
+  return (white>=0?'+':'')+(white/100).toFixed(1);
+}
+function renderReview(){
+  if(!reviewActive)return;
+  var disp=reviewExploring?reviewExploreState:reviewData.positions[reviewIdx];
+  if(!disp)return;
+  st=clone(disp);
+  captured=[];moveHist=[];
+  for(var j=0;j<reviewIdx;j++){moveHist.push(reviewData.moves[j].san);if(reviewData.moves[j].cap)captured.push({piece:reviewData.moves[j].cap,by:reviewData.moves[j].color});}
+  if(reviewExploring){for(var k=0;k<reviewExploreStack.length;k++){moveHist.push(reviewExploreStack[k].san);if(reviewExploreStack[k].m.cap)captured.push({piece:reviewExploreStack[k].m.cap,by:reviewExploreStack[k].color});}}
+  if(reviewExploring&&reviewExploreStack.length)lastMove={from:reviewExploreStack[reviewExploreStack.length-1].m.from,to:reviewExploreStack[reviewExploreStack.length-1].m.to};
+  else if(reviewIdx>0)lastMove={from:reviewData.moves[reviewIdx-1].from,to:reviewData.moves[reviewIdx-1].to};
+  else lastMove=null;
+  checkSq=-1;
+  if(st&&inCheck(st,st.turn)){for(var i=0;i<64;i++){var pp=st.b[i];if(pp&&pp.t==='k'&&pp.c===st.turn){checkSq=i;break;}}}
+  selected=-1;selMoves=[];animMove=null;drag=null;
+  turnDot.style.background=st.turn==='w'?'#f5f5f5':'#222';
+  turnDot.style.borderColor=st.turn==='w'?'#999':'#555';
+  turnName.textContent=(reviewExploring?'Try mode — ':'Review — ')+colorName(st.turn)+' to move';
+  renderPlayers();renderMoves();draw();
+  var rs=document.getElementById('reviewStatus');
+  if(rs){
+    var txt='Chaal '+reviewIdx+' / '+reviewData.moves.length+' • Eval: '+evalText(st);
+    if(reviewExploring)txt+=' • '+reviewTryNote+' Back / Forward dabate hi asli line par wapas aa jaoge.';
+    else if(reviewIdx<reviewData.moves.length){
+      var r=reviewData.ratings[reviewIdx];
+      if(r)txt+=' • Agli chaal: '+r.playedSan+' — '+r.label+' (Best: '+r.bestSan+')';
+      else txt+=' • Rating ban rahi hai…';
+    }
+    rs.textContent=txt;
+  }
+  renderReviewSummary();renderReviewList();
+}
+function gotoReviewIdx(k){
+  if(!reviewActive)return;
+  reviewExploring=false;reviewExploreStack=[];reviewTryNote='';
+  reviewIdx=Math.max(0,Math.min(reviewData.moves.length,k));
+  renderReview();
+}
+function backToRealReview(){
+  if(!reviewActive)return;
+  var base=reviewExploreBase;
+  reviewExploring=false;reviewExploreStack=[];reviewTryNote='';
+  reviewIdx=base;renderReview();
+}
+function applyReviewMove(m){
+  if(!reviewActive)return;
+  if(!reviewExploring){
+    reviewExploring=true;reviewExploreBase=reviewIdx;reviewExploreStack=[];reviewExploreState=clone(reviewData.positions[reviewIdx]);
+  }
+  var san=moveNotation(m,reviewExploreState);
+  var col=reviewExploreState.turn;
+  reviewExploreStack.push({m:{from:m.from,to:m.to,cap:m.cap||null,epCap:(m.epCap!=null?m.epCap:null),dbl:!!m.dbl,promo:m.promo||null,castle:m.castle||null},san:san,color:col});
+  doMove(reviewExploreState,m);
+  var realSan=(reviewExploreBase<reviewData.moves.length)?reviewData.moves[reviewExploreBase].san:'—';
+  reviewTryNote='Try: '+san+'. Asli chaal is position par thi: '+realSan+'.';
+  renderReview();
+}
+function openReview(){
+  if(!finalState||!gameMoves.length)return;
+  var sameGame=reviewData.moves.length===gameMoves.length&&gameMoves.length>0&&reviewData.moves[0]&&reviewData.moves[0].san===gameMoves[0].san&&reviewData.moves[reviewData.moves.length-1].san===gameMoves[gameMoves.length-1].san;
+  if(!sameGame){
+    reviewData={moves:gameMoves.slice(),positions:[],ratings:[],classifying:false,classified:0};
+    for(var i=0;i<gameMoves.length;i++)reviewData.positions.push(clone(gameMoves[i].before));
+    reviewData.positions.push(clone(finalState));
+  }
+  phase='review';
+  reviewActive=true;reviewIdx=gameMoves.length;reviewExploring=false;reviewExploreStack=[];reviewTryNote='';
+  var rb=document.getElementById('reviewBar');if(rb)rb.classList.remove('hidden');
+  showPanel(null);
+  renderReview();
+  startClassification();
+}
+function exitReview(){
+  if(!reviewActive)return;
+  reviewActive=false;reviewExploring=false;reviewExploreStack=[];
+  var rb=document.getElementById('reviewBar');if(rb)rb.classList.add('hidden');
+  st=clone(finalState);captured=finalCaptured.slice();moveHist=finalMoveHist.slice();lastMove=finalLastMove;checkSq=finalCheckSq;selected=-1;selMoves=[];animMove=null;drag=null;
+  phase='over';renderPlayers();renderMoves();syncTop();draw();
+  var note=document.getElementById('gameOverReviewNote');
+  var rs=document.getElementById('reviewSummary');
+  if(note&&rs&&reviewData.moves.length)note.textContent=rs.textContent;
+  showPanel('gameover');
+}
+function showReviewBest(){
+  if(!reviewActive||!st)return;
+  var rs=document.getElementById('reviewStatus');if(rs)rs.textContent='Engine soch raha hai…';
+  setTimeout(function(){
+    if(!reviewActive)return;
+    var best=aiBestMove(st,3,0);
+    if(!best){if(rs)rs.textContent='Is position me koi legal chaal nahi hai.';return;}
+    selected=best.from;selMoves=[best];draw();
+    if(rs)rs.textContent='Best chaal (depth 3): '+moveNotation(best,st)+' — is square par gold highlight hai. Tum board par apni chaal chal kar Try kar sakte ho.';
+  },50);
 }
 
 /* ================= Drawing ================= */
@@ -1739,7 +2029,7 @@ function eventSq(e){
   return rr*8+cc;
 }
 function onTapSq(sq){
-  if(phase!=='play'||!isHumanTurn()||sq<0)return;
+  if(!canInput()||sq<0)return;
   var pc=st.b[sq];
   if(selected>=0){
     for(var i=0;i<selMoves.length;i++){
@@ -1774,16 +2064,22 @@ function evClient(e){
 }
 canvas.addEventListener('pointerdown',function(e){
   e.preventDefault();
-  if(phase!=='play'||!isHumanTurn())return;
+  if(!canInput())return;
   var sq=eventSq(e);
   if(sq<0)return;
   var c=evClient(e);
   drag={from:sq,x:c.x,y:c.y,active:false};
   var pc=st.b[sq];
   if(pc&&pc.c===st.turn){
-    selected=sq;
+    /* REVIEW-CLICKFIX: only prepare the move list here — do NOT set
+       selected. The old code selected on down, then pointerup ran
+       onTapSq on the same square and toggled it straight off again,
+       so a tap could never select a piece and only drag worked.
+       Tap select / move / deselect now lives entirely in onTapSq
+       on pointerup, and drag uses this prepared selMoves on drop.
+       A second tap on a destination is not an own piece, so it must
+       NOT clear selMoves — only own-piece downs refresh the list. */
     selMoves=genMoves(st,false).filter(function(m){return m.from===sq;});
-    sfx.select();
     draw();
   }
 });
@@ -1881,6 +2177,14 @@ onTap('btnDiff',function(){
 });
 onTap('btnAgain',function(){newGame();});
 onTap('btnView',function(){showPanel(null);});
+onTap('btnReview',function(){openReview();});
+onTap('btnRvFirst',function(){gotoReviewIdx(0);});
+onTap('btnRvPrev',function(){gotoReviewIdx(reviewIdx-1);});
+onTap('btnRvNext',function(){gotoReviewIdx(reviewIdx+1);});
+onTap('btnRvLast',function(){gotoReviewIdx(reviewData.moves.length);});
+onTap('btnRvBest',function(){showReviewBest();});
+onTap('btnRvBackToReal',function(){backToRealReview();});
+onTap('btnRvExit',function(){exitReview();});
 onTap('btnCtlNew',function(){phase='modesetup';showPanel('modesetup');});
 onTap('btnCtlUndo',function(){doUndo();});
 onTap('btnCtlHint',function(){hintMove();});
